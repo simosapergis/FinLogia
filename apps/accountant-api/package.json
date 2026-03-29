@@ -1,0 +1,29 @@
+{
+  "name": "finlogia-accountant-api",
+  "version": "1.0.0",
+  "description": "Cloud Functions backend for the FinLogia Accountant Portal — cross-project invoice access for accountants.",
+  "type": "module",
+  "scripts": {
+    "setup:project": "bash scripts/setup_project.sh",
+    "create:accountant": "bash scripts/create_accountant.sh",
+    "register:client": "bash scripts/register_client.sh",
+    "deploy": "firebase deploy --project finlogia-accountant-portal --only functions",
+    "prepare": "npx simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged"
+  },
+  "lint-staged": {
+    "functions/**/*.js": [
+      "npm run lint --prefix functions",
+      "bash -c 'npm run test --prefix functions'"
+    ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "lint-staged": "^15.0.0",
+    "simple-git-hooks": "^2.0.0"
+  }
+}

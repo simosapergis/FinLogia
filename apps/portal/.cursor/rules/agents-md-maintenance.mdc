@@ -1,0 +1,23 @@
+---
+description: Keep AGENTS.md accurate and concise after every structural change
+alwaysApply: true
+---
+
+# AGENTS.md Maintenance
+
+After any structural change to the codebase, evaluate whether `AGENTS.md` needs updating.
+
+## What triggers an update
+
+- New or removed: page, component, composable, store, API service, route, or env var
+- Changed domain flow (upload, notifications, financial)
+- New dependency added to `package.json` that affects architecture
+- Changed conventions (file naming, API patterns, styling)
+
+## Rules
+
+- Update `AGENTS.md` in the same commit as the structural change
+- Keep the file under **200 lines** — if an addition would exceed this, compress or remove lower-value content
+- The **Inventory** section (components, composables, stores, API services) must always reflect the current codebase
+- The **Screens** table must list every route
+- New API services must use `apiRequest` from `apiClient.ts` unless there is a documented reason not to

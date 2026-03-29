@@ -1,0 +1,21 @@
+node_modules/
+dist/
+invoice_samples/
+.DS_Store
+*.log
+*.local
+.env.local
+.env
+.env.*.local
+# Vite / build artifacts inside subprojects
+pwa-client/node_modules/
+pwa-client/dist/
+# Client setup state (resumability)
+.setup_state_*
+# Editor junk
+.vscode/
+.idea/
+
+
+clients.json
+pwa-client/.firebaserc

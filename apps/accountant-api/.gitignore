@@ -1,0 +1,9 @@
+node_modules/
+.env*
+.DS_Store
+*.log
+.firebase/
+.firebaserc
+.setup_state_*
+firebase-config.*.json
+setup_project.log

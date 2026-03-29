@@ -1,0 +1,38 @@
+{
+  "name": "invoice_scanner",
+  "version": "1.0.0",
+  "description": "CLI tool that uses GPT-4o to extract Greek invoice fields via OCR.",
+  "type": "module",
+  "scripts": {
+    "setup:client": "bash scripts/setup_new_client.sh",
+    "deploy:client": "bash scripts/deploy_client.sh",
+    "deploy:some": "bash scripts/deploy_some.sh",
+    "deploy:all": "bash scripts/deploy_all.sh",
+    "prepare": "npx simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged"
+  },
+  "lint-staged": {
+    "functions/**/*.js": [
+      "npm run lint --prefix functions",
+      "bash -c 'npm run test --prefix functions'"
+    ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.11.1",
+    "@google-cloud/vision": "^5.3.4",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.1.1",
+    "openai": "^4.77.0",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "lint-staged": "^15.0.0",
+    "simple-git-hooks": "^2.0.0"
+  }
+}
+

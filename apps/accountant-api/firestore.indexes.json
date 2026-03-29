@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "invoice_views",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientProjectId", "order": "ASCENDING" },
+        { "fieldPath": "invoiceId", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
