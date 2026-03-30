@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, buildUrl } from './apiClient';
 
 interface ExportInvoice {
   supplierId: string;
@@ -21,5 +21,5 @@ export async function exportClientInvoices(params: {
   invoices: ExportInvoice[];
 }): Promise<ExportResponse> {
   const path = import.meta.env.VITE_EXPORT_CLIENT_INVOICES_PATH;
-  return apiRequest<ExportResponse>(path, { method: 'POST', body: params });
+  return apiRequest<ExportResponse>(buildUrl(path), 'POST', params);
 }

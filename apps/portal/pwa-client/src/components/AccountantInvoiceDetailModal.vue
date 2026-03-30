@@ -104,7 +104,7 @@ import { X, ExternalLink, Check, X as XIcon } from 'lucide-vue-next';
 import type { InvoiceDetail } from '@/modules/invoices/Invoice';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
 import { recordInvoiceView } from '@/services/api/invoicesApi';
-import { formatCurrency, formatDate } from '@/utils/date';
+import { formatCurrency, formatDateTime } from '@/utils/date';
 import { notify } from '@/services/notifications';
 
 const db = getFirestore(firebaseApp);
@@ -129,11 +129,11 @@ const loading = ref(false);
 
 function formatInvoiceDate(date: unknown): string {
   if (!date) return '—';
-  if (typeof date === 'string') return formatDate(date);
+  if (typeof date === 'string') return formatDateTime(date);
   if (typeof date === 'object' && date !== null && '_seconds' in date) {
-    return formatDate(new Date((date as { _seconds: number })._seconds * 1000));
+    return formatDateTime(new Date((date as { _seconds: number })._seconds * 1000));
   }
-  return formatDate(date as Date);
+  return formatDateTime(date as Date);
 }
 
 watch(

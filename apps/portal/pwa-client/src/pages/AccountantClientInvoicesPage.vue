@@ -1,7 +1,7 @@
 <template>
   <section class="w-full pb-24">
     <header class="mb-6">
-      <RouterLink to="/clients" class="mb-2 inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700">
+      <RouterLink to="/accountant/clients" class="mb-2 inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700">
         <ArrowLeft class="h-4 w-4" />
         Πίσω στους πελάτες
       </RouterLink>

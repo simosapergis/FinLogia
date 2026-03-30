@@ -447,6 +447,7 @@ const navLinks = computed(() => {
 
 const isActiveRoute = (to: string): boolean => {
   if (to === '/') return route.path === '/';
+  if (to === '/accountant') return route.path === '/accountant';
   return route.path.startsWith(to);
 };
 

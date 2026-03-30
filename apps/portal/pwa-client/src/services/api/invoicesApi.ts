@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, buildUrl } from './apiClient';
 
 interface UpdateAuditStatusResponse {
   success: boolean;
@@ -11,7 +11,7 @@ export async function updateAuditStatus(params: {
   status: 'registered' | 'denied' | null;
 }): Promise<UpdateAuditStatusResponse> {
   const path = import.meta.env.VITE_UPDATE_AUDIT_STATUS_PATH || '/updateAuditStatus_v2';
-  return apiRequest<UpdateAuditStatusResponse>(path, 'POST', params);
+  return apiRequest<UpdateAuditStatusResponse>(buildUrl(path), 'POST', params);
 }
 
 export async function recordInvoiceView(params: {
@@ -19,5 +19,5 @@ export async function recordInvoiceView(params: {
   invoiceId: string;
 }): Promise<{ success: boolean }> {
   const path = import.meta.env.VITE_RECORD_INVOICE_VIEW_PATH || '/recordInvoiceView_v2';
-  return apiRequest<{ success: boolean }>(path, 'POST', params);
+  return apiRequest<{ success: boolean }>(buildUrl(path), 'POST', params);
 }
