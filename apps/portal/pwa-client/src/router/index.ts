@@ -1,19 +1,25 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
 import { firebaseApp } from '@/services/firebase';
+import { useUserStore } from '@/store/userStore';
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', name: 'home', component: () => import('@/pages/OverviewPage.vue'), meta: { requiresAuth: true } },
+  { path: '/', name: 'home', component: () => import('@/pages/OverviewPage.vue'), meta: { requiresAuth: true, role: 'business' } },
   { path: '/login', name: 'login', component: () => import('@/pages/LoginPage.vue') },
-  { path: '/upload', name: 'upload', component: () => import('@/pages/UploadPage.vue'), meta: { requiresAuth: true } },
-  { path: '/invoices', name: 'invoices', component: () => import('@/pages/InvoicesPage.vue'), meta: { requiresAuth: true } },
-  { path: '/suppliers', name: 'suppliers', component: () => import('@/pages/SuppliersPage.vue'), meta: { requiresAuth: true } },
-  { path: '/suppliers/:supplierId/invoices', name: 'supplier-invoices', component: () => import('@/pages/SupplierInvoicesPage.vue'), meta: { requiresAuth: true } },
-  { path: '/notifications', name: 'notifications', component: () => import('@/pages/NotificationsPage.vue'), meta: { requiresAuth: true } },
-  { path: '/income', name: 'income', component: () => import('@/pages/IncomePage.vue'), meta: { requiresAuth: true } },
-  { path: '/expenses', name: 'expenses', component: () => import('@/pages/ExpensesPage.vue'), meta: { requiresAuth: true } },
-  { path: '/financial-overview', name: 'financial-overview', component: () => import('@/pages/FinancialOverviewPage.vue'), meta: { requiresAuth: true } },
-  { path: '/export-invoices', name: 'export-invoices', component: () => import('@/pages/ExportInvoicesPage.vue'), meta: { requiresAuth: true } },
+  { path: '/upload', name: 'upload', component: () => import('@/pages/UploadPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/invoices', name: 'invoices', component: () => import('@/pages/InvoicesPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/suppliers', name: 'suppliers', component: () => import('@/pages/SuppliersPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/suppliers/:supplierId/invoices', name: 'supplier-invoices', component: () => import('@/pages/SupplierInvoicesPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/notifications', name: 'notifications', component: () => import('@/pages/NotificationsPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/income', name: 'income', component: () => import('@/pages/IncomePage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/expenses', name: 'expenses', component: () => import('@/pages/ExpensesPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/financial-overview', name: 'financial-overview', component: () => import('@/pages/FinancialOverviewPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  { path: '/export-invoices', name: 'export-invoices', component: () => import('@/pages/ExportInvoicesPage.vue'), meta: { requiresAuth: true, role: 'business' } },
+  
+  // Accountant Routes
+  { path: '/accountant', name: 'accountant-dashboard', component: () => import('@/pages/AccountantDashboardPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
+  { path: '/accountant/clients', name: 'accountant-clients', component: () => import('@/pages/AccountantClientsPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
+  { path: '/accountant/clients/:businessId/invoices', name: 'accountant-client-invoices', component: () => import('@/pages/AccountantClientInvoicesPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
 ];
 
 const router = createRouter({
@@ -25,26 +31,44 @@ const router = createRouter({
  * Wait for Firebase Auth to resolve the initial auth state.
  * Returns the current user (or null) once the listener fires.
  */
-const waitForAuthReady = (): Promise<boolean> => {
+const waitForAuthReady = (): Promise<User | null> => {
   const auth = getAuth(firebaseApp);
   return new Promise((resolve) => {
     // If user is already resolved, return immediately
     if (auth.currentUser !== null) {
-      resolve(true);
+      resolve(auth.currentUser);
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       unsubscribe();
-      resolve(Boolean(user));
+      resolve(user);
     });
   });
 };
 
 router.beforeEach(async (to) => {
   if (to.meta.requiresAuth) {
-    const isAuthenticated = await waitForAuthReady();
-    if (!isAuthenticated) {
+    const user = await waitForAuthReady();
+    if (!user) {
       return { name: 'login', query: { redirect: to.fullPath } };
+    }
+
+    const userStore = useUserStore();
+    // Ensure userStore has processed the user (it might still be fetching businessId)
+    if (userStore.user?.uid !== user.uid) {
+      await userStore.setUser(user);
+    }
+
+    const isAccountant = userStore.isAccountant;
+
+    // If accountant tries to access root, redirect to accountant dashboard
+    // UNLESS they explicitly want to view their own business
+    if (to.path === '/' && isAccountant && localStorage.getItem('viewMode_business') !== 'true') {
+      return { name: 'accountant-dashboard' };
+    }
+
+    if (to.meta.role === 'accountant' && !isAccountant) {
+      return { name: 'home' }; // Normal users cannot access accountant routes
     }
   }
 });

@@ -18,8 +18,8 @@ function sanitizeId(value, fallback) {
   );
 }
 
-function invoiceDocRef(invoiceId) {
-  return db.collection(METADATA_INVOICE_COLLECTION).doc(invoiceId);
+function invoiceDocRef(businessId, invoiceId) {
+  return db.collection('businesses').doc(businessId).collection(METADATA_INVOICE_COLLECTION).doc(invoiceId);
 }
 
 function normalizeInvoiceId(invoiceId) {
@@ -47,10 +47,10 @@ function padPageNumber(pageNumber) {
   return String(pageNumber).padStart(3, '0');
 }
 
-async function ensureInvoiceDocument({ invoiceId, uid, userName, bucketName, totalPages, isPaid }) {
+async function ensureInvoiceDocument({ businessId, invoiceId, uid, userName, bucketName, totalPages, isPaid }) {
   const resolvedInvoiceId = normalizeInvoiceId(invoiceId);
   const normalizedTotalPages = normalizeTotalPages(totalPages);
-  const docRef = invoiceDocRef(resolvedInvoiceId);
+  const docRef = invoiceDocRef(businessId, resolvedInvoiceId);
 
   const metadata = await db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
@@ -61,10 +61,11 @@ async function ensureInvoiceDocument({ invoiceId, uid, userName, bucketName, tot
 
       tx.set(docRef, {
         invoiceId: resolvedInvoiceId,
+        businessId,
         ownerUid: uid,
         ownerName: userName || null,
         bucket: bucketName,
-        storageFolder: `${UPLOADS_PREFIX}${resolvedInvoiceId}`,
+        storageFolder: `businesses/${businessId}/uploads/${resolvedInvoiceId}`,
         status: INVOICE_STATUS.pending,
         totalPages: normalizedTotalPages,
         uploadedPages: [],
@@ -115,10 +116,10 @@ async function ensureInvoiceDocument({ invoiceId, uid, userName, bucketName, tot
   return metadata;
 }
 
-async function registerUploadedPage({ invoiceId, pageNumber, objectName, bucketName, contentType, totalPages, uid }) {
+async function registerUploadedPage({ businessId, invoiceId, pageNumber, objectName, bucketName, contentType, totalPages, uid }) {
   const normalizedPageNumber = normalizePageNumber(pageNumber);
   const normalizedTotalPages = normalizeTotalPages(totalPages);
-  const docRef = invoiceDocRef(invoiceId);
+  const docRef = invoiceDocRef(businessId, invoiceId);
 
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
@@ -185,13 +186,19 @@ async function registerUploadedPage({ invoiceId, pageNumber, objectName, bucketN
 }
 
 function parseUploadObjectName(objectName) {
-  if (!objectName || !objectName.startsWith(UPLOADS_PREFIX)) {
+  if (!objectName || !objectName.startsWith('businesses/')) {
     return null;
   }
 
-  const remainder = objectName.slice(UPLOADS_PREFIX.length);
-  const [invoiceId, rest] = remainder.split('/', 2);
-  if (!invoiceId || !rest) return null;
+  // Expected format: businesses/{businessId}/uploads/{invoiceId}/page-{N}-{filename}
+  const parts = objectName.split('/');
+  if (parts.length < 5 || parts[2] !== 'uploads') {
+    return null;
+  }
+
+  const businessId = parts[1];
+  const invoiceId = parts[3];
+  const rest = parts.slice(4).join('/');
 
   const pageMatch = rest.match(/^page-(\d{1,4})-/i);
   if (!pageMatch) return null;
@@ -199,6 +206,7 @@ function parseUploadObjectName(objectName) {
   const pageNumber = Number(pageMatch[1]);
 
   return {
+    businessId,
     invoiceId,
     pageNumber,
   };

@@ -6,6 +6,10 @@ import { PAYMENT_STATUS } from './config.js';
 function validatePaymentRequest(body) {
   const errors = [];
 
+  if (!body.businessId || typeof body.businessId !== 'string') {
+    errors.push('businessId is required and must be a string');
+  }
+
   if (!body.supplierId || typeof body.supplierId !== 'string') {
     errors.push('supplierId is required and must be a string');
   }
@@ -95,6 +99,10 @@ const EDITABLE_INVOICE_FIELDS = [
  */
 function validateUpdateFieldsRequest(body) {
   const errors = [];
+
+  if (!body.businessId || typeof body.businessId !== 'string') {
+    errors.push('businessId is required and must be a string');
+  }
 
   if (!body.supplierId || typeof body.supplierId !== 'string') {
     errors.push('supplierId is required and must be a string');

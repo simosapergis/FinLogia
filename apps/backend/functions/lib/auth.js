@@ -1,4 +1,4 @@
-import { admin } from './config.js';
+import { admin, db } from './config.js';
 
 function extractBearerToken(headerValue) {
   if (!headerValue) return null;
@@ -16,6 +16,13 @@ async function authenticateRequest(req) {
   }
   try {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    
+    // Fetch businessId from users collection
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    if (userDoc.exists) {
+      decodedToken.businessId = userDoc.data().businessId;
+    }
+    
     return { user: decodedToken };
   } catch (error) {
     console.error('Token verification failed:', error);
@@ -27,4 +34,23 @@ function getUserDisplayName(decodedToken) {
   return decodedToken.name || decodedToken.email || decodedToken.uid;
 }
 
-export { extractBearerToken, authenticateRequest, getUserDisplayName };
+/**
+ * Validates if the user has access to the specified businessId
+ */
+function validateBusinessAccess(user, targetBusinessId) {
+  if (!targetBusinessId) {
+    return { error: 'businessId is required', status: 400 };
+  }
+  
+  if (user.isAccountant === true) {
+    return { success: true };
+  }
+  
+  if (user.businessId === targetBusinessId) {
+    return { success: true };
+  }
+  
+  return { error: 'Unauthorized access to this business', status: 403 };
+}
+
+export { extractBearerToken, authenticateRequest, getUserDisplayName, validateBusinessAccess };

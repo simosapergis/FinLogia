@@ -1,4 +1,4 @@
-import { getAuthToken, buildUrl } from '@/services/api/apiClient';
+import { apiRequest, buildUrl } from '@/services/api/apiClient';
 
 export interface PaymentRequest {
   supplierId: string;
@@ -39,26 +39,12 @@ export class PaymentError extends Error {
 const UPDATE_PAYMENT_STATUS_PATH = import.meta.env.VITE_UPDATE_PAYMENT_STATUS_PATH ?? 'updatePaymentStatus';
 
 export const updatePaymentStatus = async (payload: PaymentRequest): Promise<PaymentResponse> => {
-  const token = await getAuthToken();
-
-  const response = await fetch(buildUrl(UPDATE_PAYMENT_STATUS_PATH), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorData: PaymentErrorResponse = await response.json().catch(() => ({
-      error: 'Αποτυχία καταχώρησης πληρωμής',
-    }));
+  try {
+    return await apiRequest<PaymentResponse>(buildUrl(UPDATE_PAYMENT_STATUS_PATH), 'POST', payload);
+  } catch (error: any) {
     throw new PaymentError(
-      errorData.error ?? 'Αποτυχία καταχώρησης πληρωμής',
-      errorData.details ?? []
+      error.message ?? 'Αποτυχία καταχώρησης πληρωμής',
+      error.details ?? []
     );
   }
-
-  return response.json();
 };

@@ -65,6 +65,15 @@
                   <p class="truncate text-sm font-medium text-slate-900">{{ userEmail }}</p>
                 </div>
                 <button
+                  v-if="isAccountant"
+                  type="button"
+                  class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                  @click="toggleViewMode"
+                >
+                  <Briefcase class="h-4 w-4 text-slate-400" />
+                  {{ viewModeBusiness ? 'Προβολή Λογιστή' : 'Προβολή Επιχείρησης' }}
+                </button>
+                <button
                   type="button"
                   class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                   @click="handleLogout"
@@ -208,6 +217,15 @@
           <!-- Logout Button & Version -->
           <div class="mt-auto border-t border-slate-100 p-4">
             <button
+              v-if="isAccountant"
+              type="button"
+              class="mb-2 flex w-full items-center justify-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 active:scale-[0.98]"
+              @click="toggleViewMode"
+            >
+              <Briefcase class="h-5 w-5" />
+              {{ viewModeBusiness ? 'Προβολή Λογιστή' : 'Προβολή Επιχείρησης' }}
+            </button>
+            <button
               v-if="isStandalone"
               type="button"
               class="mb-2 flex w-full items-center justify-center gap-3 rounded-xl bg-primary-50 px-4 py-3 text-sm font-medium text-primary-700 transition hover:bg-primary-100 active:scale-[0.98]"
@@ -333,6 +351,8 @@ import {
   Info,
   Loader,
   RefreshCw,
+  Users,
+  Briefcase,
 } from 'lucide-vue-next';
 
 import { useNotifications } from '@/composables/useNotifications';
@@ -359,6 +379,26 @@ const sidebarOpen = ref(false);
 const isUpdating = ref(false);
 const isStandalone = ref(false);
 
+const isAccountant = computed(() => {
+  // In a real app, this would be derived from the user's custom claims
+  // For now, we can check if the route starts with /accountant or if there's a claim
+  return user.value?.customClaims?.isAccountant === true || route.path.startsWith('/accountant');
+});
+
+const viewModeBusiness = ref(localStorage.getItem('viewMode_business') === 'true');
+
+const toggleViewMode = () => {
+  viewModeBusiness.value = !viewModeBusiness.value;
+  localStorage.setItem('viewMode_business', String(viewModeBusiness.value));
+  if (viewModeBusiness.value) {
+    router.push('/');
+  } else {
+    router.push('/accountant');
+  }
+  userMenuOpen.value = false;
+  sidebarOpen.value = false;
+};
+
 const handleUpdate = async () => {
   if (!uiStore.updateFunction) return;
   
@@ -381,16 +421,25 @@ onMounted(() => {
                        (window.navigator as any).standalone === true;
 });
 
-const navLinks = [
-  { to: '/', label: 'Σύνοψη', icon: Home },
-  { to: '/upload', label: 'Σάρωση', icon: Camera },
-  { to: '/invoices', label: 'Τιμολόγια', icon: FileText },
-  { to: '/suppliers', label: 'Προμηθευτές', icon: Building2 },
-  { to: '/income', label: 'Έσοδα', icon: CircleDollarSign },
-  { to: '/expenses', label: 'Έξοδα', icon: Wallet },
-  { to: '/financial-overview', label: 'Οικ. Απεικόνιση', icon: BarChart3 },
-  { to: '/export-invoices', label: 'Εξαγωγή', icon: Download },
-];
+const navLinks = computed(() => {
+  if (isAccountant.value && !viewModeBusiness.value) {
+    return [
+      { to: '/accountant', label: 'Σύνοψη', icon: Home },
+      { to: '/accountant/clients', label: 'Πελάτες', icon: Users },
+    ];
+  }
+  
+  return [
+    { to: '/', label: 'Σύνοψη', icon: Home },
+    { to: '/upload', label: 'Σάρωση', icon: Camera },
+    { to: '/invoices', label: 'Τιμολόγια', icon: FileText },
+    { to: '/suppliers', label: 'Προμηθευτές', icon: Building2 },
+    { to: '/income', label: 'Έσοδα', icon: CircleDollarSign },
+    { to: '/expenses', label: 'Έξοδα', icon: Wallet },
+    { to: '/financial-overview', label: 'Οικ. Απεικόνιση', icon: BarChart3 },
+    { to: '/export-invoices', label: 'Εξαγωγή', icon: Download },
+  ];
+});
 
 const isActiveRoute = (to: string): boolean => {
   if (to === '/') return route.path === '/';

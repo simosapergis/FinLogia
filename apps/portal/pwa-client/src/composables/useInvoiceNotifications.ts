@@ -17,6 +17,7 @@ import { firebaseApp } from '@/services/firebase';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useNotifications } from '@/composables/useNotifications';
 import { useAuth } from '@/composables/useAuth';
+import { useUserStore } from '@/store/userStore';
 
 const db = getFirestore(firebaseApp);
 
@@ -43,12 +44,16 @@ export function useInvoiceNotifications() {
   const notificationStore = useNotificationStore();
   const { notifySuccess, notifyError } = useNotifications();
   const { user, isAuthenticated } = useAuth();
+  const userStore = useUserStore();
 
   const startListening = () => {
     if (unsubscribe || !user.value?.uid) return;
+    
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return;
 
     const q = query(
-      collection(db, 'metadata_invoices'),
+      collection(db, `businesses/${businessId}/metadata_invoices`),
       where('ownerUid', '==', user.value.uid),
       where('status', 'in', ['done', 'error']),
       where('notificationSeen', '==', false),
@@ -112,7 +117,9 @@ export function useInvoiceNotifications() {
 
   const markAsSeen = async (invoiceMetadataId: string) => {
     try {
-      const docRef = doc(db, 'metadata_invoices', invoiceMetadataId);
+      const businessId = userStore.currentBusinessId;
+      if (!businessId) return;
+      const docRef = doc(db, `businesses/${businessId}/metadata_invoices`, invoiceMetadataId);
       await updateDoc(docRef, { notificationSeen: true, notificationSeenAt: serverTimestamp() });
     } catch (error) {
       console.error('[InvoiceNotifications] Failed to mark as seen:', error);
@@ -122,9 +129,10 @@ export function useInvoiceNotifications() {
   // Auto-start/stop based on auth state
   const initializeNotifications = () => {
     watch(
-      isAuthenticated,
-      (authenticated) => {
-        if (authenticated && user.value?.uid) {
+      [isAuthenticated, () => userStore.currentBusinessId],
+      ([authenticated, businessId]) => {
+        if (authenticated && user.value?.uid && businessId) {
+          stopListening(); // Stop any existing listener
           startListening();
         } else {
           stopListening();

@@ -72,12 +72,13 @@ function validateExportRequest(body) {
  * Batch-fetches invoice documents by their direct Firestore paths.
  * Returns an array of invoice data objects (only those that exist).
  *
+ * @param {string} businessId
  * @param {Array<{ supplierId: string, invoiceId: string }>} invoicePairs
  * @returns {Promise<Array<{ invoiceId: string, supplierId: string, ...data }>>}
  */
-async function fetchInvoiceDocuments(invoicePairs) {
+async function fetchInvoiceDocuments(businessId, invoicePairs) {
   const refs = invoicePairs.map(({ supplierId, invoiceId }) =>
-    db.collection('suppliers').doc(supplierId).collection('invoices').doc(invoiceId)
+    db.collection('businesses').doc(businessId).collection('invoices').doc(invoiceId)
   );
 
   const snapshots = await db.getAll(...refs);
@@ -110,11 +111,11 @@ async function fetchInvoiceDocuments(invoicePairs) {
  *
  * Uses batched writes (max 500 per batch, matching MAX_EXPORT_INVOICES).
  */
-async function recordDownloads({ invoicePairs, uid, userName }) {
+async function recordDownloads({ businessId, invoicePairs, uid, userName }) {
   const batch = db.batch();
 
   for (const { supplierId, invoiceId } of invoicePairs) {
-    const ref = db.collection('suppliers').doc(supplierId).collection('invoices').doc(invoiceId);
+    const ref = db.collection('businesses').doc(businessId).collection('invoices').doc(invoiceId);
     const updates = {
       [`downloadedBy.${uid}.lastDownloadedAt`]: serverTimestamp(),
       [`downloadedBy.${uid}.downloadCount`]: admin.firestore.FieldValue.increment(1),

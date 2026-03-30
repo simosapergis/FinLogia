@@ -6,18 +6,19 @@ const EDITABLE_SUPPLIER_FIELDS = ['name', 'supplierCategory', 'supplierTaxNumber
 const MAX_BATCH_OPS = 500;
 
 async function ensureSupplierProfile({
+  businessId,
   supplierId,
   supplierName,
   supplierTaxNumber,
   supplierCategory,
   missingTaxNumber,
 }) {
-  if (!supplierId) {
-    console.warn('Missing supplierId; skipping supplier profile update.');
+  if (!supplierId || !businessId) {
+    console.warn('Missing supplierId or businessId; skipping supplier profile update.');
     return { canonicalName: undefined };
   }
 
-  const supplierRef = db.doc(`suppliers/${supplierId}`);
+  const supplierRef = db.doc(`businesses/${businessId}/suppliers/${supplierId}`);
 
   try {
     const canonicalName = await db.runTransaction(async (tx) => {
@@ -122,6 +123,10 @@ function validateDeliveryObject(delivery, errors) {
 function validateUpdateSupplierRequest(body) {
   const errors = [];
 
+  if (!body.businessId || typeof body.businessId !== 'string') {
+    errors.push('businessId is required and must be a string');
+  }
+
   if (!body.supplierId || typeof body.supplierId !== 'string') {
     errors.push('supplierId is required and must be a string');
   }
@@ -177,22 +182,23 @@ function validateUpdateSupplierRequest(body) {
  * @param {Object} params.supplierUpdates - Fields to set/merge on the new supplier doc
  * @returns {Promise<{ migratedInvoices: number }>}
  */
-async function migrateSupplier({ oldSupplierId, newSupplierId, supplierUpdates }) {
+async function migrateSupplier({ businessId, oldSupplierId, newSupplierId, supplierUpdates }) {
   const bucketName = getBucketName();
   const bucket = storage.bucket(bucketName);
 
-  const oldSupplierRef = db.collection('suppliers').doc(oldSupplierId);
-  const newSupplierRef = db.collection('suppliers').doc(newSupplierId);
+  const businessRef = db.collection('businesses').doc(businessId);
+  const oldSupplierRef = businessRef.collection('suppliers').doc(oldSupplierId);
+  const newSupplierRef = businessRef.collection('suppliers').doc(newSupplierId);
 
   // 1. Read old supplier data, target supplier (if exists), and all invoices
   const [oldSupplierSnap, newSupplierSnap, invoicesSnap] = await Promise.all([
     oldSupplierRef.get(),
     newSupplierRef.get(),
-    oldSupplierRef.collection('invoices').get(),
+    businessRef.collection('invoices').where('supplierId', '==', oldSupplierId).get(),
   ]);
 
   if (!oldSupplierSnap.exists) {
-    throw Object.assign(new Error(`Supplier not found: suppliers/${oldSupplierId}`), { httpStatus: 404 });
+    throw Object.assign(new Error(`Supplier not found: businesses/${businessId}/suppliers/${oldSupplierId}`), { httpStatus: 404 });
   }
 
   const oldSupplierData = oldSupplierSnap.data();
@@ -274,8 +280,8 @@ async function migrateSupplier({ oldSupplierId, newSupplierId, supplierUpdates }
 
   // 4. Update cross-references in metadata_invoices and financial_entries
   await Promise.all([
-    updateMetadataInvoiceRefs(oldSupplierId, newSupplierId),
-    updateFinancialEntryRefs(oldSupplierId, newSupplierId),
+    updateMetadataInvoiceRefs(businessId, oldSupplierId, newSupplierId),
+    updateFinancialEntryRefs(businessId, oldSupplierId, newSupplierId),
   ]);
 
   // 5. Clean up old GCS files (best-effort, after Firestore is consistent)
@@ -314,51 +320,29 @@ async function commitInBatches(ops) {
   }
 }
 
-async function updateMetadataInvoiceRefs(oldId, newId) {
-  const oldPathPrefix = `suppliers/${oldId}/`;
-  const newPathPrefix = `suppliers/${newId}/`;
+async function updateMetadataInvoiceRefs(businessId, oldId, newId) {
+  const oldPathPrefix = `businesses/${businessId}/invoices/`;
+  const newPathPrefix = `businesses/${businessId}/invoices/`;
 
   // Update docs where detectedSupplierId matches
-  const detectedQuery = await db.collection(METADATA_INVOICE_COLLECTION).where('detectedSupplierId', '==', oldId).get();
+  const detectedQuery = await db.collection('businesses').doc(businessId).collection(METADATA_INVOICE_COLLECTION).where('detectedSupplierId', '==', oldId).get();
 
   // Update docs where processedInvoicePath starts with old prefix.
-  // Firestore has no startsWith — use range query on string ordering.
-  const pathQuery = await db
-    .collection(METADATA_INVOICE_COLLECTION)
-    .where('processedInvoicePath', '>=', oldPathPrefix)
-    .where('processedInvoicePath', '<', oldPathPrefix + '\uf8ff')
-    .get();
-
-  // De-duplicate in case the same doc matches both queries
-  const docsById = new Map();
-  for (const snap of [...detectedQuery.docs, ...pathQuery.docs]) {
-    if (!docsById.has(snap.id)) docsById.set(snap.id, snap);
-  }
-
-  if (docsById.size === 0) return;
+  // Actually, processedInvoicePath doesn't contain supplierId anymore in the flat structure!
+  // It's just businesses/{businessId}/invoices/{invoiceId}. So we don't need to update it!
+  
+  if (detectedQuery.empty) return;
 
   const ops = [];
-  for (const [, snap] of docsById) {
-    const data = snap.data();
-    const updates = {};
-
-    if (data.detectedSupplierId === oldId) {
-      updates.detectedSupplierId = newId;
-    }
-    if (data.processedInvoicePath?.startsWith(oldPathPrefix)) {
-      updates.processedInvoicePath = newPathPrefix + data.processedInvoicePath.slice(oldPathPrefix.length);
-    }
-
-    if (Object.keys(updates).length > 0) {
-      ops.push({ type: 'set', ref: snap.ref, data: updates, opts: { merge: true } });
-    }
+  for (const snap of detectedQuery.docs) {
+    ops.push({ type: 'set', ref: snap.ref, data: { detectedSupplierId: newId }, opts: { merge: true } });
   }
 
   await commitInBatches(ops);
 }
 
-async function updateFinancialEntryRefs(oldId, newId) {
-  const querySnap = await db.collection(FINANCIAL_ENTRIES_COLLECTION).where('supplierId', '==', oldId).get();
+async function updateFinancialEntryRefs(businessId, oldId, newId) {
+  const querySnap = await db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).where('supplierId', '==', oldId).get();
 
   if (querySnap.empty) return;
 

@@ -3,37 +3,75 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow authenticated users to read supplier docs; everything else stays blocked.
-    match /suppliers/{supplierId} {
-      allow read: if request.auth != null;
-      allow write: if false;   // keep writes locked to backend for now
-    }
-    
-    // Allow authenticated users to read supplier invoices; everything else stays blocked.
-    match /suppliers/{supplierId}/invoices/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if false;   // keep writes locked to backend for now
-    }
-    
-    // collectionGroup query for ALL invoices subcollections
-    match /{path=**}/invoices/{invoiceId} {
-      allow read: if request.auth != null;
-      allow write: if false;   // keep writes locked to backend for now
+    function isAccountant() {
+      return request.auth != null && request.auth.token.isAccountant == true;
     }
 
-    match /metadata_invoices/{document=**} {
-      allow read: if request.auth != null;
-      allow update:
-        if request.auth != null
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data)
-          .changedKeys()
-          .hasOnly(['notificationSeen', 'notificationSeenAt'])
-        && ( !('notificationSeen' in request.resource.data) || request.resource.data.notificationSeen is bool )
-        && ( !('notificationSeenAt' in request.resource.data) || request.resource.data.notificationSeenAt is timestamp );
+    function getUserBusinessId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.businessId;
     }
-    
-    // Default deny for all other paths
+
+    function isBusinessOwner(businessId) {
+      return request.auth != null && getUserBusinessId() == businessId;
+    }
+
+    // Users collection mapping
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only backend/admin scripts create these
+    }
+
+    // Accountants collection
+    match /accountants/{accountId} {
+      allow read: if request.auth != null && request.auth.uid == accountId;
+      allow write: if false;
+    }
+
+    match /businesses/{businessId} {
+      // Business profile
+      allow read: if isBusinessOwner(businessId) || isAccountant();
+      allow write: if false; // Backend only
+
+      // Suppliers
+      match /suppliers/{supplierId} {
+        allow read: if isBusinessOwner(businessId) || isAccountant();
+        allow write: if false; // Backend only
+      }
+
+      // Invoices
+      match /invoices/{invoiceId} {
+        allow read: if isBusinessOwner(businessId) || isAccountant();
+        allow write: if false; // Backend only
+      }
+
+      // Metadata Invoices
+      match /metadata_invoices/{invoiceId} {
+        allow read: if isBusinessOwner(businessId);
+        allow update:
+          if isBusinessOwner(businessId)
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.diff(resource.data)
+            .changedKeys()
+            .hasOnly(['notificationSeen', 'notificationSeenAt'])
+          && ( !('notificationSeen' in request.resource.data) || request.resource.data.notificationSeen is bool )
+          && ( !('notificationSeenAt' in request.resource.data) || request.resource.data.notificationSeenAt is timestamp );
+        allow create, delete: if false;
+      }
+
+      // Financial Entries
+      match /financial_entries/{entryId} {
+        allow read: if isBusinessOwner(businessId);
+        allow write: if false; // Backend only
+      }
+
+      // Recurring Expenses
+      match /recurring_expenses/{expenseId} {
+        allow read: if isBusinessOwner(businessId);
+        allow write: if false; // Backend only
+      }
+    }
+
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

@@ -1,5 +1,6 @@
 import { getAuth } from 'firebase/auth';
 import { firebaseApp } from '@/services/firebase';
+import { useUserStore } from '@/store/userStore';
 
 const auth = getAuth(firebaseApp);
 const BASE_URL = import.meta.env.VITE_BASE_URL ?? '';
@@ -26,6 +27,8 @@ export const apiRequest = async <T>(
   body?: unknown
 ): Promise<T> => {
   const token = await getAuthToken();
+  const userStore = useUserStore();
+  const businessId = userStore.currentBusinessId;
 
   const options: RequestInit = {
     method,
@@ -35,11 +38,33 @@ export const apiRequest = async <T>(
     },
   };
 
-  if (body) {
-    options.body = JSON.stringify(body);
+  let finalEndpoint = endpoint;
+
+  if (method === 'GET' && businessId) {
+    const url = new URL(endpoint.startsWith('http') ? endpoint : `http://dummy${endpoint}`);
+    if (!url.searchParams.has('businessId')) {
+      url.searchParams.append('businessId', businessId);
+    }
+    finalEndpoint = endpoint.startsWith('http') ? url.toString() : `${url.pathname}${url.search}`;
   }
 
-  const response = await fetch(endpoint, options);
+  if (body) {
+    if (typeof body === 'object' && body !== null) {
+      const bodyObj = body as Record<string, unknown>;
+      // Only inject businessId if it's not already provided in the body
+      if (businessId && !('businessId' in bodyObj)) {
+        options.body = JSON.stringify({ ...bodyObj, businessId });
+      } else {
+        options.body = JSON.stringify(bodyObj);
+      }
+    } else {
+      options.body = JSON.stringify(body);
+    }
+  } else if (method === 'POST' && businessId) {
+    options.body = JSON.stringify({ businessId });
+  }
+
+  const response = await fetch(finalEndpoint, options);
 
   const data = await response.json();
 

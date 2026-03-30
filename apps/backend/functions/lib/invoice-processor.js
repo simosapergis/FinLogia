@@ -84,6 +84,7 @@ async function processInvoiceDocumentHandler(event) {
   }
 
   const invoiceId = context.invoiceId;
+  const businessId = context.businessId;
   const invoiceData = lockedSnapshot;
   const bucketName = invoiceData.bucket || getBucketName();
   if (!bucketName) {
@@ -174,6 +175,7 @@ async function processInvoiceDocumentHandler(event) {
     const uploadedBy = invoiceData.ownerUid || null;
     const uploadedByName = invoiceData.ownerName || null;
     const { canonicalName } = await ensureSupplierProfile({
+      businessId,
       supplierId,
       supplierName,
       supplierTaxNumber,
@@ -187,9 +189,10 @@ async function processInvoiceDocumentHandler(event) {
     // Check for duplicate invoice (same supplier + invoice number, only against done invoices)
     if (invoiceNumber && supplierId) {
       const duplicateQuery = await db
-        .collection('suppliers')
-        .doc(supplierId)
+        .collection('businesses')
+        .doc(businessId)
         .collection('invoices')
+        .where('supplierId', '==', supplierId)
         .where('invoiceNumber', '==', invoiceNumber)
         .where('processingStatus', '==', INVOICE_STATUS.uploaded)
         .limit(1)
@@ -215,7 +218,7 @@ async function processInvoiceDocumentHandler(event) {
       }
     }
 
-    const pdfObjectPath = `suppliers/${supplierId}/invoices/${invoiceId}.pdf`;
+    const pdfObjectPath = `businesses/${businessId}/invoices/${invoiceId}.pdf`;
     try {
       if (isSinglePdf) {
         // Server-side copy: no download/upload, no memory usage
@@ -231,7 +234,7 @@ async function processInvoiceDocumentHandler(event) {
             contentType: 'application/pdf',
             metadata: {
               pages: pages.length,
-              originalFolder: invoiceData.storageFolder || `${UPLOADS_PREFIX}${invoiceId}`,
+              originalFolder: invoiceData.storageFolder || `businesses/${businessId}/uploads/${invoiceId}`,
             },
           });
       }
@@ -240,7 +243,7 @@ async function processInvoiceDocumentHandler(event) {
       console.error(`Failed to store combined PDF for invoice ${invoiceId}:`, pdfError);
     }
 
-    const invoiceDocRef = db.doc(`suppliers/${supplierId}/invoices/${invoiceId}`);
+    const invoiceDocRef = db.doc(`businesses/${businessId}/invoices/${invoiceId}`);
 
     const isCredit = mappedResult.documentType === 'ΠΙΣΤΩΤΙΚΟ';
 
@@ -333,7 +336,7 @@ async function processInvoiceDocumentHandler(event) {
           updatedAt: serverTimestamp(),
         };
 
-        await db.collection(FINANCIAL_ENTRIES_COLLECTION).add(expenseEntry);
+        await db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).add(expenseEntry);
         console.log(`Auto-created expense entry for paid-at-upload invoice ${invoiceId}`);
       } catch (expenseError) {
         console.error('Failed to auto-create expense entry for paid-at-upload invoice:', expenseError);

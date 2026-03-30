@@ -1,4 +1,4 @@
-import { getAuthToken, buildUrl } from '@/services/api/apiClient';
+import { apiRequest, buildUrl } from '@/services/api/apiClient';
 
 export interface SignedDownloadUrlResponse {
   downloadUrl: string;
@@ -8,6 +8,7 @@ export interface SignedDownloadUrlResponse {
 
 interface SignedDownloadUrlRequest {
   filePath: string;
+  businessId?: string;
 }
 
 const SIGNED_DOWNLOAD_URL_PATH = import.meta.env.VITE_SIGNED_DOWNLOAD_URL_PATH ?? 'sign/download';
@@ -15,23 +16,5 @@ const SIGNED_DOWNLOAD_URL_PATH = import.meta.env.VITE_SIGNED_DOWNLOAD_URL_PATH ?
 export const requestSignedDownloadUrl = async (
   payload: SignedDownloadUrlRequest
 ): Promise<SignedDownloadUrlResponse> => {
-  const token = await getAuthToken();
-
-  const response = await fetch(buildUrl(SIGNED_DOWNLOAD_URL_PATH), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      filePath: payload.filePath,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to get download URL: ${errorText}`);
-  }
-
-  return response.json();
+  return apiRequest<SignedDownloadUrlResponse>(buildUrl(SIGNED_DOWNLOAD_URL_PATH), 'POST', payload);
 };

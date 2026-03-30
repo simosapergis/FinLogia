@@ -1,4 +1,4 @@
-import { getAuthToken, buildUrl } from '@/services/api/apiClient';
+import { apiRequest, buildUrl } from '@/services/api/apiClient';
 
 export interface ExportInvoiceEntry {
   supplierId: string;
@@ -43,32 +43,13 @@ export class ExportError extends Error {
 const EXPORT_INVOICES_PATH = import.meta.env.VITE_EXPORT_INVOICES_PATH ?? '/exportInvoices_v2';
 
 export const exportInvoices = async (payload: ExportRequest): Promise<ExportResponse> => {
-  const token = await getAuthToken();
-
-  const response = await fetch(buildUrl(EXPORT_INVOICES_PATH), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorData: ExportErrorResponse = await response.json().catch(() => ({
-      error: 'Αποτυχία εξαγωγής τιμολογίων',
-    }));
-    const details = Array.isArray(errorData.details)
-      ? errorData.details
-      : errorData.details
-        ? [errorData.details]
-        : [];
+  try {
+    return await apiRequest<ExportResponse>(buildUrl(EXPORT_INVOICES_PATH), 'POST', payload);
+  } catch (error: any) {
     throw new ExportError(
-      errorData.error ?? 'Αποτυχία εξαγωγής τιμολογίων',
-      details,
-      errorData.code,
+      error.message ?? 'Αποτυχία εξαγωγής τιμολογίων',
+      error.details ?? [],
+      error.code
     );
   }
-
-  return response.json();
 };

@@ -82,6 +82,19 @@
           @payment="openPaymentModal"
         />
       </div>
+      
+      <div v-if="hasMore" class="mt-8 flex justify-center">
+        <button
+          type="button"
+          :disabled="loadingMore"
+          class="flex items-center gap-2 rounded-xl bg-slate-100 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
+          @click="loadMoreInvoices(supplierId)"
+        >
+          <Loader2 v-if="loadingMore" class="h-4 w-4 animate-spin" />
+          {{ loadingMore ? 'Φόρτωση...' : 'Φόρτωση περισσότερων' }}
+        </button>
+      </div>
+
       <div v-if="!invoiceLoading && invoices.length === 0" class="py-8 text-center">
         <FileText class="mx-auto h-12 w-12 text-slate-300" :stroke-width="1.5" />
         <p class="mt-4 text-sm font-medium text-slate-600">Δεν βρέθηκαν τιμολόγια</p>
@@ -129,7 +142,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ChevronLeft, FileText, Mail, Phone, ArrowLeftRight, Pencil } from 'lucide-vue-next';
+import { ChevronLeft, FileText, Mail, Phone, ArrowLeftRight, Pencil, Loader2 } from 'lucide-vue-next';
 
 import InvoiceDetailView from '@/components/InvoiceDetailView.vue';
 import InvoicePreviewCard from '@/components/InvoicePreviewCard.vue';
@@ -148,7 +161,7 @@ const route = useRoute();
 const router = useRouter();
 const supplierStore = useSupplierStore();
 const { hydrate } = useSuppliers();
-const { invoices, loading: invoiceLoading, error: invoiceError, loadInvoices, updateInvoice } = useSupplierInvoices();
+const { invoices, loading: invoiceLoading, loadingMore, hasMore, error: invoiceError, loadInvoices, loadMoreInvoices, updateInvoice } = useSupplierInvoices();
 
 const supplierId = computed(() => route.params.supplierId as string);
 const supplier = ref<Supplier | null>(null);

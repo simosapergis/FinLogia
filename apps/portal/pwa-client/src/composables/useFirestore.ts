@@ -1,7 +1,6 @@
 import {
   getFirestore,
   collection,
-  collectionGroup,
   doc,
   setDoc,
   getDocs,
@@ -10,10 +9,14 @@ import {
   orderBy,
   where,
   limit,
+  startAfter,
   Timestamp,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 
 import { firebaseApp } from '@/services/firebase';
+import { useUserStore } from '@/store/userStore';
 import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 import type { Supplier } from '@/modules/suppliers/Supplier';
 
@@ -47,24 +50,34 @@ export const clearDeliveryCache = (): void => {
 };
 
 export function useFirestore() {
-  const invoicesRef = collection(db, 'invoices');
-  const suppliersRef = collection(db, 'suppliers');
+  const userStore = useUserStore();
+  
+  const getBusinessId = () => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) {
+      throw new Error('No businessId found for current user');
+    }
+    return businessId;
+  };
+
+  const getInvoicesRef = () => collection(db, `businesses/${getBusinessId()}/invoices`);
+  const getSuppliersRef = () => collection(db, `businesses/${getBusinessId()}/suppliers`);
 
   const saveInvoiceRecord = async (invoice: Invoice) => {
-    const invoiceDoc = doc(invoicesRef, invoice.id);
+    const invoiceDoc = doc(getInvoicesRef(), invoice.id);
     await setDoc(invoiceDoc, invoice, { merge: true });
     return invoice;
   };
 
   const fetchInvoices = async (): Promise<Invoice[]> => {
-    const snapshot = await getDocs(query(invoicesRef, orderBy('uploadedAt', 'desc')));
+    const snapshot = await getDocs(query(getInvoicesRef(), orderBy('uploadedAt', 'desc')));
     const invoices = snapshot.docs.map((docSnapshot) => docSnapshot.data() as Invoice);
     console.info('[Firestore] fetched invoices', invoices.length);
     return invoices;
   };
 
   const fetchSuppliers = async (): Promise<Supplier[]> => {
-    const snapshot = await getDocs(query(suppliersRef, orderBy('name', 'asc')));
+    const snapshot = await getDocs(query(getSuppliersRef(), orderBy('name', 'asc')));
     const suppliers = snapshot.docs.map((docSnapshot) => {
       const data = docSnapshot.data() as Supplier;
       return { ...data, id: docSnapshot.id };
@@ -72,16 +85,33 @@ export function useFirestore() {
     return suppliers;
   };
 
-  const fetchSupplierInvoices = async (supplierId: string): Promise<Invoice[]> => {
-    const invoicesCollection = collection(db, `suppliers/${supplierId}/invoices`);
-    const q = query(invoicesCollection, orderBy('uploadedAt', 'desc'));
+  const fetchSupplierInvoices = async (
+    supplierId: string,
+    lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null,
+    pageSize: number = 20
+  ): Promise<{ invoices: Invoice[]; lastVisible: QueryDocumentSnapshot<DocumentData> | null; hasMore: boolean }> => {
+    let q = query(
+      getInvoicesRef(),
+      where('supplierId', '==', supplierId),
+      orderBy('uploadedAt', 'desc'),
+      limit(pageSize)
+    );
+
+    if (lastVisibleDoc) {
+      q = query(q, startAfter(lastVisibleDoc));
+    }
+
     const snapshot = await getDocs(q);
     const invoices = snapshot.docs.map((docSnapshot) => ({ ...(docSnapshot.data() as Invoice), id: docSnapshot.id }));
-    return invoices;
+    
+    const lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length === pageSize;
+
+    return { invoices, lastVisible, hasMore };
   };
 
   const fetchSupplierInvoice = async (supplierId: string, invoiceId: string): Promise<Invoice | null> => {
-    const docPath = `suppliers/${supplierId}/invoices/${invoiceId}`;
+    const docPath = `businesses/${getBusinessId()}/invoices/${invoiceId}`;
     console.info('[Firestore] fetching document', docPath);
     const invoiceDoc = doc(db, docPath);
     const snapshot = await getDoc(invoiceDoc);
@@ -96,7 +126,7 @@ export function useFirestore() {
 
   const fetchUnpaidInvoices = async (): Promise<Invoice[]> => {
     const q = query(
-      collectionGroup(db, 'invoices'),
+      getInvoicesRef(),
       where('paymentStatus', 'in', ['unpaid', 'partially_paid']),
       orderBy('uploadedAt', 'desc')
     );
@@ -110,7 +140,7 @@ export function useFirestore() {
 
   const fetchInvoicesByDateRange = async (startDate: Date, endDate: Date): Promise<Invoice[]> => {
     const q = query(
-      collectionGroup(db, 'invoices'),
+      getInvoicesRef(),
       where('uploadedAt', '>=', startDate),
       where('uploadedAt', '<=', endDate),
       orderBy('uploadedAt', 'desc')
@@ -141,7 +171,7 @@ export function useFirestore() {
     console.info('[Firestore] Fetching suppliers for day of week:', dayOfWeek);
 
     const q = query(
-      suppliersRef,
+      getSuppliersRef(),
       where('delivery.dayOfWeek', '==', dayOfWeek),
       orderBy('name', 'asc'),
       limit(10)
@@ -170,12 +200,11 @@ export function useFirestore() {
 
   /**
    * Fetch invoices by invoiceDate range (for export page).
-   * Uses collectionGroup to query across all suppliers.
    * Extracts supplierId from the document reference path and includes downloadedBy.
    */
   const fetchInvoicesByInvoiceDate = async (startDate: Date, endDate: Date): Promise<ExportInvoice[]> => {
     const q = query(
-      collectionGroup(db, 'invoices'),
+      getInvoicesRef(),
       where('invoiceDate', '>=', Timestamp.fromDate(startDate)),
       where('invoiceDate', '<=', Timestamp.fromDate(endDate)),
       orderBy('invoiceDate', 'desc')
@@ -186,7 +215,7 @@ export function useFirestore() {
       return {
         ...(data as Invoice),
         id: docSnapshot.id,
-        supplierId: docSnapshot.ref.parent.parent?.id ?? '',
+        supplierId: data.supplierId ?? '',
         downloadedBy: (data.downloadedBy as ExportInvoice['downloadedBy']) ?? {},
       };
     });

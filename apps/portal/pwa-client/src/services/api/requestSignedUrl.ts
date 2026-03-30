@@ -1,4 +1,4 @@
-import { getAuthToken, buildUrl } from '@/services/api/apiClient';
+import { apiRequest, buildUrl } from '@/services/api/apiClient';
 
 export interface SignedUrlResponse {
   uploadUrl: string;
@@ -27,28 +27,13 @@ const SIGNED_UPLOAD_URL_PATH = import.meta.env.VITE_SIGNED_UPLOAD_URL_PATH ?? 's
 const defaultFolder = import.meta.env.VITE_FIREBASE_BUCKET_FOLDER ?? 'uploads';
 
 export const requestSignedUrl = async (payload: SignedUrlRequest): Promise<SignedUrlResponse> => {
-  const token = await getAuthToken();
-
-  const response = await fetch(buildUrl(SIGNED_UPLOAD_URL_PATH), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      filename: payload.filename,
-      contentType: payload.contentType,
-      folder: payload.folder ?? defaultFolder,
-      pageNumber: payload.pageNumber,
-      ...(payload.totalPages ? { totalPages: payload.totalPages } : {}),
-      ...(payload.invoiceId ? { invoiceId: payload.invoiceId } : {}),
-      ...(payload.isPaid !== undefined ? { isPaid: payload.isPaid } : {}),
-    }),
+  return apiRequest<SignedUrlResponse>(buildUrl(SIGNED_UPLOAD_URL_PATH), 'POST', {
+    filename: payload.filename,
+    contentType: payload.contentType,
+    folder: payload.folder ?? defaultFolder,
+    pageNumber: payload.pageNumber,
+    ...(payload.totalPages ? { totalPages: payload.totalPages } : {}),
+    ...(payload.invoiceId ? { invoiceId: payload.invoiceId } : {}),
+    ...(payload.isPaid !== undefined ? { isPaid: payload.isPaid } : {}),
   });
-
-  if (!response.ok) {
-    throw new Error('Failed to request signed URL');
-  }
-
-  return response.json();
 };

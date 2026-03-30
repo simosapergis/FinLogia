@@ -67,6 +67,13 @@ import {
   getExportDownloadUrl,
 } from './lib/invoice-export.js';
 
+import {
+  validateUpdateAuditStatusRequest,
+  validateRecordViewRequest,
+  updateInvoiceAuditStatus,
+  recordInvoiceView,
+} from './lib/invoices.js';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIGNED UPLOAD URL
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -100,11 +107,17 @@ export const getSignedUploadUrl_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'filename is required in the request body');
   }
 
+  const businessId = decoded.businessId;
+  if (!businessId) {
+    return sendError(res, 403, 'User does not belong to a business');
+  }
+
   try {
     const normalizedTotalPages = normalizeTotalPages(totalPages);
     const normalizedPageNumber = normalizePageNumber(pageNumber);
     const sanitizedFilename = sanitizeFilename(filename);
     const invoiceMetadata = await ensureInvoiceDocument({
+      businessId,
       invoiceId,
       uid: decoded.uid,
       userName: getUserDisplayName(decoded),
@@ -117,7 +130,7 @@ export const getSignedUploadUrl_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     if (!resolvedTotalPages) {
       throw new Error('totalPages must be specified for the invoice');
     }
-    const objectName = `${UPLOADS_PREFIX}${resolvedInvoiceId}/page-${padPageNumber(
+    const objectName = `businesses/${businessId}/uploads/${resolvedInvoiceId}/page-${padPageNumber(
       normalizedPageNumber
     )}-${sanitizedFilename}`;
     const expiresAtMs = Date.now() + SIGNED_URL_TTL_MS;
@@ -166,8 +179,8 @@ export const processUploadedInvoice_v2 = onObjectFinalized(
       return;
     }
 
-    if (!objectName.startsWith(UPLOADS_PREFIX)) {
-      console.log(`Skipping ${objectName} because it is outside ${UPLOADS_PREFIX}`);
+    if (!objectName.startsWith('businesses/')) {
+      console.log(`Skipping ${objectName} because it is outside businesses/`);
       return;
     }
 
@@ -179,6 +192,7 @@ export const processUploadedInvoice_v2 = onObjectFinalized(
 
     try {
       await registerUploadedPage({
+        businessId: parsed.businessId,
         invoiceId: parsed.invoiceId,
         pageNumber: parsed.pageNumber,
         objectName,
@@ -202,7 +216,7 @@ export const processInvoiceDocument_v2 = onDocumentWritten(
   {
     region: REGION,
     serviceAccount: SERVICE_ACCOUNT_EMAIL,
-    document: `${METADATA_INVOICE_COLLECTION}/{invoiceId}`,
+    document: `businesses/{businessId}/${METADATA_INVOICE_COLLECTION}/{invoiceId}`,
   },
   processInvoiceDocumentHandler
 );
@@ -250,14 +264,20 @@ export const updatePaymentStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
-  const { supplierId, invoiceId, action, paymentMethod, notes, creditInvoiceId, creditAmountUsed } = body;
+  // 2.5 Verify access
+  const { businessId, supplierId, invoiceId, action, paymentMethod, notes, creditInvoiceId, creditAmountUsed } = body;
+  
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
   const paymentDate = body.paymentDate
     ? admin.firestore.Timestamp.fromDate(new Date(body.paymentDate))
     : admin.firestore.FieldValue.serverTimestamp();
 
-  const invoiceRef = db.collection('suppliers').doc(supplierId).collection('invoices').doc(invoiceId);
+  const businessRef = db.collection('businesses').doc(businessId);
+  const invoiceRef = businessRef.collection('invoices').doc(invoiceId);
   const creditInvoiceRef = creditInvoiceId
-    ? db.collection('suppliers').doc(supplierId).collection('invoices').doc(creditInvoiceId)
+    ? businessRef.collection('invoices').doc(creditInvoiceId)
     : null;
 
   try {
@@ -430,7 +450,7 @@ export const updatePaymentStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
           updatedAt: serverTimestamp(),
         };
 
-        const expenseRef = await db.collection(FINANCIAL_ENTRIES_COLLECTION).add(expenseEntry);
+        const expenseRef = await db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).add(expenseEntry);
         console.log(`Auto-created expense entry ${expenseRef.id} for invoice payment`);
       } catch (expenseError) {
         // Log but don't fail the payment - expense creation is secondary
@@ -502,9 +522,13 @@ export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
-  const { supplierId, invoiceId, fields } = body;
+  const { businessId, supplierId, invoiceId, fields } = body;
 
-  const invoiceRef = db.collection('suppliers').doc(supplierId).collection('invoices').doc(invoiceId);
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
+  const invoiceRef = db.collection('businesses').doc(businessId).collection('invoices').doc(invoiceId);
 
   try {
     const result = await db.runTransaction(async (tx) => {
@@ -685,7 +709,11 @@ export const updateSupplierFields_v2 = onRequest(HTTP_OPTS, async (req, res) => 
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
-  const { supplierId, fields } = body;
+  const { businessId, supplierId, fields } = body;
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
 
   // Detect whether the tax-number change triggers a supplier-ID migration
   const newSupplierId =
@@ -721,6 +749,7 @@ export const updateSupplierFields_v2 = onRequest(HTTP_OPTS, async (req, res) => 
       }
 
       const { migratedInvoices } = await migrateSupplier({
+        businessId,
         oldSupplierId: supplierId,
         newSupplierId,
         supplierUpdates,
@@ -739,7 +768,7 @@ export const updateSupplierFields_v2 = onRequest(HTTP_OPTS, async (req, res) => 
     }
 
     // Standard in-place update (no ID change)
-    const supplierRef = db.collection('suppliers').doc(supplierId);
+    const supplierRef = db.collection('businesses').doc(businessId).collection('suppliers').doc(supplierId);
 
     const result = await db.runTransaction(async (tx) => {
       const supplierSnap = await tx.get(supplierRef);
@@ -907,6 +936,15 @@ export const addFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
+  const { businessId } = body;
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
   try {
     const entry = buildFinancialEntry({
       type: body.type,
@@ -919,7 +957,7 @@ export const addFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
       userName: getUserDisplayName(user),
     });
 
-    const docRef = await db.collection(FINANCIAL_ENTRIES_COLLECTION).add(entry);
+    const docRef = await db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).add(entry);
 
     console.log(`Financial entry created: ${docRef.id} - ${body.type} ${body.category} ${body.amount}`);
 
@@ -975,10 +1013,18 @@ export const editFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
-  const { entryId, fields } = body;
+  const { businessId, entryId, fields } = body;
+
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
 
   try {
-    const entryRef = db.collection(FINANCIAL_ENTRIES_COLLECTION).doc(entryId);
+    const entryRef = db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).doc(entryId);
     const entrySnap = await entryRef.get();
 
     if (!entrySnap.exists) {
@@ -1073,13 +1119,20 @@ export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => 
   }
   const user = authResult.user;
 
-  const { entryId } = req.body || {};
+  const { businessId, entryId } = req.body || {};
+  if (!businessId || typeof businessId !== 'string') {
+    return sendError(res, 400, 'businessId is required and must be a string');
+  }
   if (!entryId || typeof entryId !== 'string') {
     return sendError(res, 400, 'entryId is required and must be a string');
   }
 
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
   try {
-    const entryRef = db.collection(FINANCIAL_ENTRIES_COLLECTION).doc(entryId);
+    const entryRef = db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).doc(entryId);
     const entrySnap = await entryRef.get();
 
     if (!entrySnap.exists) {
@@ -1132,7 +1185,15 @@ export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, authResult.status, authResult.error);
   }
 
-  const { startDate, endDate, type, includeDeleted } = req.body || {};
+  const { businessId, startDate, endDate, type, includeDeleted } = req.body || {};
+
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (authResult.user.businessId !== businessId && !authResult.user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
 
   if (!startDate || !endDate) {
     return sendError(res, 400, 'startDate and endDate are required');
@@ -1147,6 +1208,8 @@ export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
   try {
     let query = db
+      .collection('businesses')
+      .doc(businessId)
       .collection(FINANCIAL_ENTRIES_COLLECTION)
       .where('date', '>=', admin.firestore.Timestamp.fromDate(start))
       .where('date', '<=', admin.firestore.Timestamp.fromDate(end));
@@ -1245,6 +1308,15 @@ export const addRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
+  const { businessId } = body;
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
   try {
     const recurringExpense = {
       category: body.category,
@@ -1258,7 +1330,7 @@ export const addRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
       updatedAt: serverTimestamp(),
     };
 
-    const docRef = await db.collection(RECURRING_EXPENSES_COLLECTION).add(recurringExpense);
+    const docRef = await db.collection('businesses').doc(businessId).collection(RECURRING_EXPENSES_COLLECTION).add(recurringExpense);
 
     console.log(`Recurring expense created: ${docRef.id} - ${body.category} ${body.amount}`);
 
@@ -1305,10 +1377,18 @@ export const updateRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) =
   }
   const user = authResult.user;
 
-  const { recurringId, fields } = req.body || {};
+  const { businessId, recurringId, fields } = req.body || {};
+
+  if (!businessId || typeof businessId !== 'string') {
+    return sendError(res, 400, 'businessId is required');
+  }
 
   if (!recurringId || typeof recurringId !== 'string') {
     return sendError(res, 400, 'recurringId is required');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
   }
 
   if (!fields || typeof fields !== 'object') {
@@ -1338,7 +1418,7 @@ export const updateRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) =
   }
 
   try {
-    const recurringRef = db.collection(RECURRING_EXPENSES_COLLECTION).doc(recurringId);
+    const recurringRef = db.collection('businesses').doc(businessId).collection(RECURRING_EXPENSES_COLLECTION).doc(recurringId);
     const recurringSnap = await recurringRef.get();
 
     if (!recurringSnap.exists) {
@@ -1393,9 +1473,9 @@ export const processRecurringExpenses_v2 = onSchedule(
     console.log(`Processing recurring expenses for day ${dayOfMonth}`);
 
     try {
-      // Find all active recurring expenses for today's day of month
+      // Find all active recurring expenses for today's day of month across all businesses
       const snapshot = await db
-        .collection(RECURRING_EXPENSES_COLLECTION)
+        .collectionGroup(RECURRING_EXPENSES_COLLECTION)
         .where('isActive', '==', true)
         .where('dayOfMonth', '==', dayOfMonth)
         .get();
@@ -1410,6 +1490,9 @@ export const processRecurringExpenses_v2 = onSchedule(
 
       snapshot.forEach((doc) => {
         const recurring = doc.data();
+        
+        // Extract businessId from the document path: businesses/{businessId}/recurring_expenses/{id}
+        const businessId = doc.ref.parent.parent.id;
 
         const entry = {
           type: ENTRY_TYPE.expense,
@@ -1428,7 +1511,7 @@ export const processRecurringExpenses_v2 = onSchedule(
           updatedAt: serverTimestamp(),
         };
 
-        const newEntryRef = db.collection(FINANCIAL_ENTRIES_COLLECTION).doc();
+        const newEntryRef = db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION).doc();
         batch.set(newEntryRef, entry);
         count++;
       });
@@ -1460,9 +1543,18 @@ export const getRecurringExpenses_v2 = onRequest(HTTP_OPTS, async (req, res) => 
   if (authResult.error) {
     return sendError(res, authResult.status, authResult.error);
   }
+  
+  const businessId = req.query.businessId;
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (authResult.user.businessId !== businessId && !authResult.user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
 
   try {
-    const snapshot = await db.collection(RECURRING_EXPENSES_COLLECTION).orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection('businesses').doc(businessId).collection(RECURRING_EXPENSES_COLLECTION).orderBy('createdAt', 'desc').get();
 
     const expenses = [];
     snapshot.forEach((doc) => {
@@ -1479,6 +1571,92 @@ export const getRecurringExpenses_v2 = onRequest(HTTP_OPTS, async (req, res) => 
   } catch (error) {
     console.error('Failed to get recurring expenses:', error);
     return sendError(res, 500, 'Failed to get recurring expenses', { details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UPDATE INVOICE AUDIT STATUS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const updateAuditStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  const body = req.body || {};
+  const validationErrors = validateUpdateAuditStatusRequest(body);
+  if (validationErrors.length > 0) {
+    return sendError(res, 400, 'Validation failed', { details: validationErrors });
+  }
+
+  const { businessId, invoiceId, status } = body;
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
+  try {
+    await updateInvoiceAuditStatus({
+      businessId,
+      invoiceId,
+      status,
+      userId: user.uid,
+      userName: getUserDisplayName(user),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Η κατάσταση ελέγχου ενημερώθηκε',
+    });
+  } catch (error) {
+    console.error('Failed to update audit status:', error);
+    return sendError(res, 500, 'Αποτυχία ενημέρωσης κατάστασης', { code: 'UPDATE_AUDIT_STATUS_ERROR' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECORD INVOICE VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const recordInvoiceView_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  const body = req.body || {};
+  const validationErrors = validateRecordViewRequest(body);
+  if (validationErrors.length > 0) {
+    return sendError(res, 400, 'Validation failed', { details: validationErrors });
+  }
+
+  const { businessId, invoiceId } = body;
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
+  try {
+    await recordInvoiceView({
+      businessId,
+      invoiceId,
+      userId: user.uid,
+      userName: getUserDisplayName(user),
+    });
+
+    return res.status(200).json({
+      success: true,
+    });
+  } catch (error) {
+    console.error('Failed to record invoice view:', error);
+    return sendError(res, 500, 'Αποτυχία καταγραφής προβολής', { code: 'RECORD_VIEW_ERROR' });
   }
 });
 
@@ -1548,11 +1726,19 @@ export const exportInvoices_v2 = onRequest(EXPORT_OPTS, async (req, res) => {
     return sendError(res, 400, 'Validation failed', { details: validationErrors });
   }
 
-  const { invoices: invoicePairs } = body;
+  const { businessId, invoices: invoicePairs } = body;
+  
+  if (!businessId) {
+    return sendError(res, 400, 'businessId is required');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
 
   try {
     // 3. Fetch invoice documents by direct path
-    const invoices = await fetchInvoiceDocuments(invoicePairs);
+    const invoices = await fetchInvoiceDocuments(businessId, invoicePairs);
 
     if (invoices.length === 0) {
       return res.status(200).json({
@@ -1586,7 +1772,7 @@ export const exportInvoices_v2 = onRequest(EXPORT_OPTS, async (req, res) => {
       invoiceId,
     }));
     try {
-      await recordDownloads({ invoicePairs: exportedPairs, uid: user.uid, userName: getUserDisplayName(user) });
+      await recordDownloads({ businessId, invoicePairs: exportedPairs, uid: user.uid, userName: getUserDisplayName(user) });
     } catch (trackingError) {
       // Log but don't fail the export — download tracking is secondary
       console.error('Failed to record download tracking:', trackingError);
