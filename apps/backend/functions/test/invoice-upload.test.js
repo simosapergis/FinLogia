@@ -176,30 +176,31 @@ describe('padPageNumber', () => {
 
 describe('parseUploadObjectName', () => {
   it('parses a valid upload object name with leading zeros', () => {
-    const result = parseUploadObjectName('uploads/invoice-123/page-001-file.pdf');
-    expect(result).toEqual({ invoiceId: 'invoice-123', pageNumber: 1 });
+    const result = parseUploadObjectName('businesses/business-1/uploads/invoice-123/page-001-file.pdf');
+    expect(result).toEqual({ businessId: 'business-1', invoiceId: 'invoice-123', pageNumber: 1 });
   });
 
   it('extracts multi-digit page numbers', () => {
-    const result = parseUploadObjectName('uploads/abc/page-012-scan.jpg');
-    expect(result).toEqual({ invoiceId: 'abc', pageNumber: 12 });
+    const result = parseUploadObjectName('businesses/business-1/uploads/abc/page-012-scan.jpg');
+    expect(result).toEqual({ businessId: 'business-1', invoiceId: 'abc', pageNumber: 12 });
   });
 
   it('handles page numbers without leading zeros', () => {
-    const result = parseUploadObjectName('uploads/inv-1/page-3-doc.png');
-    expect(result).toEqual({ invoiceId: 'inv-1', pageNumber: 3 });
+    const result = parseUploadObjectName('businesses/business-1/uploads/inv-1/page-3-doc.png');
+    expect(result).toEqual({ businessId: 'business-1', invoiceId: 'inv-1', pageNumber: 3 });
   });
 
   it('parses UUID-style invoice IDs', () => {
-    const result = parseUploadObjectName('uploads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/page-001-test.pdf');
+    const result = parseUploadObjectName('businesses/business-1/uploads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/page-001-test.pdf');
     expect(result).toEqual({
+      businessId: 'business-1',
       invoiceId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
       pageNumber: 1,
     });
   });
 
   it('returns null for non-upload paths', () => {
-    expect(parseUploadObjectName('other/path/file.pdf')).toBeNull();
+    expect(parseUploadObjectName('businesses/business-1/other/path/file.pdf')).toBeNull();
   });
 
   it('returns null for empty string', () => {
@@ -215,19 +216,19 @@ describe('parseUploadObjectName', () => {
   });
 
   it('returns null for upload path without page pattern', () => {
-    expect(parseUploadObjectName('uploads/inv-1/file.pdf')).toBeNull();
+    expect(parseUploadObjectName('businesses/business-1/uploads/inv-1/file.pdf')).toBeNull();
   });
 
   it('returns null when path has no filename after invoice ID', () => {
-    expect(parseUploadObjectName('uploads/inv-1/')).toBeNull();
+    expect(parseUploadObjectName('businesses/business-1/uploads/inv-1/')).toBeNull();
   });
 
   it('returns null when path lacks invoice ID segment', () => {
-    expect(parseUploadObjectName('uploads/')).toBeNull();
+    expect(parseUploadObjectName('businesses/business-1/uploads/')).toBeNull();
   });
 
   it('is case-insensitive for page prefix', () => {
-    const result = parseUploadObjectName('uploads/inv-1/PAGE-005-file.pdf');
-    expect(result).toEqual({ invoiceId: 'inv-1', pageNumber: 5 });
+    const result = parseUploadObjectName('businesses/business-1/uploads/inv-1/PAGE-005-file.pdf');
+    expect(result).toEqual({ businessId: 'business-1', invoiceId: 'inv-1', pageNumber: 5 });
   });
 });

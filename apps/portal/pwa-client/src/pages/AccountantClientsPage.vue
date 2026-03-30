@@ -25,7 +25,7 @@
     </div>
 
     <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <ClientCard
+      <AccountantClientCard
         v-for="client in filteredClients"
         :key="client.id"
         :client="client"
@@ -38,7 +38,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Search, Building2 } from 'lucide-vue-next';
 import Loader from '@/components/Loader.vue';
-import ClientCard from '@/components/ClientCard.vue';
+import AccountantClientCard from '@/components/AccountantClientCard.vue';
 import { useClients } from '@/composables/useClients';
 
 const { clients, loading, loadClients } = useClients();

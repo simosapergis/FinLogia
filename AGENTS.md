@@ -50,3 +50,4 @@ Flat structure scoped by `businessId`:
 - Do not use `collectionGroup` queries across different businesses.
 - Do not expose Cloud Storage buckets directly; use signed URLs.
 - Do not commit secrets or `.env` files.
+- Do not leave temporary scripts or files (e.g., one-off Node.js or bash scripts) in the workspace; always delete them after use.

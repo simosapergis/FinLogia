@@ -19,7 +19,7 @@ const routes: RouteRecordRaw[] = [
   // Accountant Routes
   { path: '/accountant', name: 'accountant-dashboard', component: () => import('@/pages/AccountantDashboardPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
   { path: '/accountant/clients', name: 'accountant-clients', component: () => import('@/pages/AccountantClientsPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
-  { path: '/accountant/clients/:businessId/invoices', name: 'accountant-client-invoices', component: () => import('@/pages/AccountantClientInvoicesPage.vue'), meta: { requiresAuth: true, role: 'accountant' } },
+  { path: '/accountant/clients/:businessId/invoices', name: 'accountant-client-invoices', component: () => import('@/pages/AccountantClientInvoicesPage.vue'), props: (route) => ({ projectId: route.params.businessId }), meta: { requiresAuth: true, role: 'accountant' } },
 ];
 
 const router = createRouter({
@@ -55,16 +55,28 @@ router.beforeEach(async (to) => {
 
     const userStore = useUserStore();
     // Ensure userStore has processed the user (it might still be fetching businessId)
-    if (userStore.user?.uid !== user.uid) {
+    // We check if userStore.user is null, or if the uid doesn't match.
+    // If it's a new login, userStore.user is null.
+    if (!userStore.user || userStore.user.uid !== user.uid) {
       await userStore.setUser(user);
+    }
+
+    // Wait for businessId to be fetched if it's still null but we are authenticated
+    // This handles the case where setUser is async and we need the businessId for routing
+    if (userStore.user && userStore.businessId === null && !userStore.isAccountant) {
+      // It might take a moment for the store to update, but setUser is awaited above.
+      // If it's still null, either the user has no businessId or it failed to fetch.
     }
 
     const isAccountant = userStore.isAccountant;
 
-    // If accountant tries to access root, redirect to accountant dashboard
+    // If accountant tries to access business routes, redirect to accountant dashboard
     // UNLESS they explicitly want to view their own business
-    if (to.path === '/' && isAccountant && localStorage.getItem('viewMode_business') !== 'true') {
-      return { name: 'accountant-dashboard' };
+    if (to.meta.role === 'business' && isAccountant) {
+      const wantsBusinessView = localStorage.getItem('viewMode_business') === 'true';
+      if (!wantsBusinessView) {
+        return { name: 'accountant-dashboard' };
+      }
     }
 
     if (to.meta.role === 'accountant' && !isAccountant) {

@@ -54,6 +54,7 @@
                 v-model="state.email"
                 type="email"
                 required
+                autocomplete="username"
                 placeholder="example@email.com"
                 class="w-full rounded-xl border-2 border-slate-200 py-3 pl-12 pr-4 text-slate-900 transition placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
               />
@@ -67,6 +68,7 @@
                 v-model="state.password"
                 type="password"
                 required
+                autocomplete="current-password"
                 placeholder="••••••••"
                 class="w-full rounded-xl border-2 border-slate-200 py-3 pl-12 pr-4 text-slate-900 transition placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
               />

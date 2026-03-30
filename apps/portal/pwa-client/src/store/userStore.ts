@@ -8,6 +8,8 @@ export const useUserStore = defineStore('user', {
     user: null as User | null,
     businessId: null as string | null,
     isAccountant: false,
+    _initPromise: null as Promise<void> | null,
+    _initUid: null as string | null,
   }),
   getters: {
     isAuthenticated: (state) => Boolean(state.user),
@@ -19,23 +21,40 @@ export const useUserStore = defineStore('user', {
   },
   actions: {
     async setUser(user: User | null) {
-      this.user = user;
-      if (user) {
-        try {
-          const token = await user.getIdTokenResult();
-          this.isAccountant = !!token.claims.isAccountant;
-          
-          const db = getFirestore(firebaseApp);
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            this.businessId = userDoc.data().businessId || null;
+      const targetUid = user?.uid || null;
+      
+      // If we are already initializing for this user, wait for it
+      if (this._initPromise && this._initUid === targetUid) {
+        return this._initPromise;
+      }
+
+      this._initUid = targetUid;
+      this._initPromise = (async () => {
+        if (user) {
+          try {
+            // Force refresh token to ensure we have the latest custom claims
+            const token = await user.getIdTokenResult(true);
+            this.isAccountant = !!token.claims.isAccountant;
+            
+            const db = getFirestore(firebaseApp);
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              this.businessId = userDoc.data().businessId || null;
+            }
+          } catch (e) {
+            console.error('Failed to fetch user businessId', e);
           }
-        } catch (e) {
-          console.error('Failed to fetch user businessId', e);
+        } else {
+          this.businessId = null;
+          this.isAccountant = false;
         }
-      } else {
-        this.businessId = null;
-        this.isAccountant = false;
+        this.user = user;
+      })();
+
+      await this._initPromise;
+      if (this._initUid === targetUid) {
+        this._initPromise = null;
+        this._initUid = null;
       }
     },
   },

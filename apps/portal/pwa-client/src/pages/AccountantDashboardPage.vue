@@ -24,7 +24,7 @@
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-semibold text-slate-900">Πελάτες</h2>
           <RouterLink
-            to="/clients"
+            to="/accountant/clients"
             class="text-sm font-medium text-primary-600 transition hover:text-primary-700"
           >
             Προβολή όλων →
@@ -37,7 +37,7 @@
         </div>
 
         <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <ClientCard
+          <AccountantClientCard
             v-for="client in clients.slice(0, 6)"
             :key="client.id"
             :client="client"
@@ -53,12 +53,17 @@ import { onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import { Building2 } from 'lucide-vue-next';
 import Loader from '@/components/Loader.vue';
-import ClientCard from '@/components/ClientCard.vue';
+import AccountantClientCard from '@/components/AccountantClientCard.vue';
 import { useClients } from '@/composables/useClients';
+import { useUserStore } from '@/store/userStore';
 
 const { clients, loading, loadClients } = useClients();
+const userStore = useUserStore();
 
 onMounted(() => {
+  if (userStore.isAccountant) {
+    console.log(`accountant: ${userStore.user?.email}`);
+  }
   loadClients();
 });
 </script>

@@ -308,7 +308,7 @@ import { ArrowLeft, Calendar, Search as SearchIcon, Loader2, Download, FileText,
 
 import Loader from '@/components/Loader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
-import InvoiceDetailModal from '@/components/InvoiceDetailModal.vue';
+import InvoiceDetailModal from '@/components/AccountantInvoiceDetailModal.vue';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseApp } from '@/services/firebase';
 import { useClientInvoices } from '@/composables/useClientInvoices';

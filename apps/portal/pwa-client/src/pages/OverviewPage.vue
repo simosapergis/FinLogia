@@ -207,9 +207,11 @@ import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 import type { Supplier } from '@/modules/suppliers/Supplier';
 import { PaymentError, updatePaymentStatus } from '@/services/api/updatePaymentStatus';
 import { formatCurrency } from '@/utils/date';
+import { useUserStore } from '@/store/userStore';
 
 const route = useRoute();
 const { fetchUnpaidInvoices, fetchSuppliersDeliveringToday, needsDeliveryCacheRefresh } = useFirestore();
+const userStore = useUserStore();
 
 const invoices = ref<Invoice[]>([]);
 const suppliersDeliveringToday = ref<Supplier[]>([]);
@@ -481,6 +483,9 @@ const handleVisibilityChange = () => {
 };
 
 onMounted(() => {
+  if (userStore.isAccountant) {
+    console.log(`accountant: ${userStore.user?.email}`);
+  }
   refreshInvoices();
   // Listen for visibility changes (handles midnight case when app resumes)
   document.addEventListener('visibilitychange', handleVisibilityChange);

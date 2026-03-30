@@ -21,16 +21,17 @@ describe('ensureSupplierProfile', () => {
     const txSet = vi.fn();
     const txUpdate = vi.fn();
 
-    db.doc = vi.fn().mockReturnValue({ path: 'suppliers/test-id' });
+    db.doc = vi.fn().mockReturnValue({ path: 'businesses/business-1/suppliers/sup-1' });
     db.runTransaction = vi.fn(async (cb) => cb({ get: txGet, set: txSet, update: txUpdate }));
 
     return { txGet, txSet, txUpdate };
   }
 
   it('returns OCR name as canonical when supplier is new', async () => {
-    mockTransaction(null);
+    const { txSet } = mockTransaction(null);
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: 'OCR Name',
       supplierTaxNumber: '123',
@@ -41,9 +42,10 @@ describe('ensureSupplierProfile', () => {
   });
 
   it('returns existing Firestore name as canonical when supplier exists', async () => {
-    mockTransaction({ name: 'Existing Name', supplierCategory: 'food', supplierTaxNumber: '123' });
+    const { txUpdate } = mockTransaction({ name: 'Existing Name', supplierCategory: 'food', supplierTaxNumber: '123' });
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: 'OCR Different Name',
       supplierTaxNumber: '123',
@@ -54,9 +56,10 @@ describe('ensureSupplierProfile', () => {
   });
 
   it('returns OCR name when existing supplier has no name', async () => {
-    mockTransaction({ name: null, supplierCategory: 'food', supplierTaxNumber: '123' });
+    const { txUpdate } = mockTransaction({ name: null, supplierCategory: 'food', supplierTaxNumber: '123' });
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: 'OCR Name',
       supplierTaxNumber: '123',
@@ -68,6 +71,7 @@ describe('ensureSupplierProfile', () => {
 
   it('returns undefined canonical name when supplierId is missing', async () => {
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: '',
       supplierName: 'Some Name',
       supplierTaxNumber: null,
@@ -78,9 +82,10 @@ describe('ensureSupplierProfile', () => {
   });
 
   it('returns null canonical name when new supplier has no name', async () => {
-    mockTransaction(null);
+    const { txSet } = mockTransaction(null);
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: null,
       supplierTaxNumber: '123',
@@ -91,9 +96,10 @@ describe('ensureSupplierProfile', () => {
   });
 
   it('returns OCR name when existing supplier has empty string name', async () => {
-    mockTransaction({ name: '', supplierCategory: 'food', supplierTaxNumber: '123' });
+    const { txUpdate } = mockTransaction({ name: '', supplierCategory: 'food', supplierTaxNumber: '123' });
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: 'OCR Name',
       supplierTaxNumber: '123',
@@ -107,6 +113,7 @@ describe('ensureSupplierProfile', () => {
     const { txSet } = mockTransaction(null);
 
     await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'acme-corp',
       supplierName: 'ACME Corp',
       supplierTaxNumber: null,
@@ -124,6 +131,7 @@ describe('ensureSupplierProfile', () => {
     const { txSet } = mockTransaction(null);
 
     await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: '123456789',
       supplierName: 'ACME Corp',
       supplierTaxNumber: '123456789',
@@ -144,6 +152,7 @@ describe('ensureSupplierProfile', () => {
     });
 
     await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'acme-corp',
       supplierName: 'ACME Corp',
       supplierTaxNumber: null,
@@ -163,6 +172,7 @@ describe('ensureSupplierProfile', () => {
     });
 
     await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'acme-corp',
       supplierName: 'ACME Corp',
       supplierTaxNumber: null,
@@ -174,10 +184,11 @@ describe('ensureSupplierProfile', () => {
   });
 
   it('returns OCR name as canonical when transaction fails', async () => {
-    db.doc = vi.fn().mockReturnValue({ path: 'suppliers/test-id' });
+    db.doc = vi.fn().mockReturnValue({ path: 'businesses/business-1/suppliers/test-id' });
     db.runTransaction = vi.fn().mockRejectedValue(new Error('TX failed'));
 
     const result = await ensureSupplierProfile({
+      businessId: 'business-1',
       supplierId: 'sup-1',
       supplierName: 'OCR Name',
       supplierTaxNumber: '123',
@@ -359,6 +370,7 @@ describe('validateDeliveryObject', () => {
 
 describe('validateUpdateSupplierRequest', () => {
   const validBody = {
+    businessId: 'business-1',
     supplierId: 'sup-1',
     fields: { name: 'New Name' },
   };
@@ -383,7 +395,7 @@ describe('validateUpdateSupplierRequest', () => {
   });
 
   it('returns early when fields is missing', () => {
-    const errors = validateUpdateSupplierRequest({ supplierId: 'sup', fields: 'not-object' });
+    const errors = validateUpdateSupplierRequest({ businessId: 'business-1', supplierId: 'sup', fields: 'not-object' });
     expect(errors).toEqual(['fields is required and must be an object']);
   });
 
@@ -458,7 +470,7 @@ describe('validateUpdateSupplierRequest', () => {
 
   it('accepts all editable fields at once', () => {
     const errors = validateUpdateSupplierRequest({
-      supplierId: 'sup-1',
+      ...validBody,
       fields: {
         name: 'Supplier Name',
         supplierCategory: 'food',
@@ -550,21 +562,36 @@ describe('migrateSupplier', () => {
 
     let metadataCallCount = 0;
     db.collection = vi.fn((name) => {
-      if (name === 'suppliers') {
+      if (name === 'businesses') {
         return {
-          doc: vi.fn((id) => {
-            if (id === 'old-id') return oldSupplierRef;
-            if (id === 'new-id') return newSupplierRef;
-            return { path: `suppliers/${id}` };
-          }),
+          doc: vi.fn((id) => ({
+            collection: vi.fn((subName) => {
+              if (subName === 'suppliers') {
+                return {
+                  doc: vi.fn((supId) => {
+                    if (supId === 'old-id') return oldSupplierRef;
+                    if (supId === 'new-id') return newSupplierRef;
+                    return { path: `suppliers/${id}` };
+                  }),
+                };
+              }
+              if (subName === 'invoices') {
+                return {
+                  where: vi.fn().mockReturnThis(),
+                  get: vi.fn().mockResolvedValue({ docs: invoiceSnaps }),
+                };
+              }
+              if (subName === 'metadata_invoices') {
+                metadataCallCount++;
+                return metadataCallCount <= 1 ? metadataDetectedChain : metadataPathChain;
+              }
+              if (subName === 'financial_entries') {
+                return financialChain;
+              }
+              return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue(mockQueryResult([])) };
+            }),
+          })),
         };
-      }
-      if (name === 'metadata_invoices') {
-        metadataCallCount++;
-        return metadataCallCount <= 1 ? metadataDetectedChain : metadataPathChain;
-      }
-      if (name === 'financial_entries') {
-        return financialChain;
       }
       return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue(mockQueryResult([])) };
     });
@@ -589,6 +616,7 @@ describe('migrateSupplier', () => {
     });
 
     const result = await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999', lastEditedBy: 'uid-1' },
@@ -617,6 +645,7 @@ describe('migrateSupplier', () => {
 
     await expect(
       migrateSupplier({
+        businessId: 'business-1',
         oldSupplierId: 'old-id',
         newSupplierId: 'new-id',
         supplierUpdates: { supplierTaxNumber: '999' },
@@ -631,6 +660,7 @@ describe('migrateSupplier', () => {
     });
 
     const result = await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '222' },
@@ -649,6 +679,7 @@ describe('migrateSupplier', () => {
     });
 
     const result = await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999' },
@@ -672,6 +703,7 @@ describe('migrateSupplier', () => {
     });
 
     await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999', name: 'Renamed' },
@@ -705,6 +737,7 @@ describe('migrateSupplier', () => {
     });
 
     await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: {
@@ -751,6 +784,7 @@ describe('migrateSupplier', () => {
     });
 
     await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999' },
@@ -764,7 +798,7 @@ describe('migrateSupplier', () => {
   it('updates metadata_invoices cross-references', async () => {
     const metaSnap = makeDocSnap('meta-1', {
       detectedSupplierId: 'old-id',
-      processedInvoicePath: 'suppliers/old-id/invoices/inv-1',
+      processedInvoicePath: 'businesses/business-1/invoices/inv-1',
     });
 
     setupMocks({
@@ -774,6 +808,7 @@ describe('migrateSupplier', () => {
     });
 
     await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999' },
@@ -783,7 +818,6 @@ describe('migrateSupplier', () => {
     const allSetCalls = mockBatch.set.mock.calls;
     const metadataUpdate = allSetCalls.find((call) => call[1].detectedSupplierId === 'new-id');
     expect(metadataUpdate).toBeDefined();
-    expect(metadataUpdate[1].processedInvoicePath).toBe('suppliers/new-id/invoices/inv-1');
   });
 
   it('updates financial_entries cross-references', async () => {
@@ -796,6 +830,7 @@ describe('migrateSupplier', () => {
     });
 
     await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999' },
@@ -833,6 +868,7 @@ describe('migrateSupplier', () => {
     });
 
     const result = await migrateSupplier({
+      businessId: 'business-1',
       oldSupplierId: 'old-id',
       newSupplierId: 'new-id',
       supplierUpdates: { supplierTaxNumber: '999' },

@@ -360,12 +360,14 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useUiStore } from '@/store/uiStore';
 import { useAuth } from '@/composables/useAuth';
 import { useInvoiceNotifications } from '@/composables/useInvoiceNotifications';
+import { useUserStore } from '@/store/userStore';
 
 const route = useRoute();
 const router = useRouter();
 const { toasts, dismiss } = useNotifications();
 const notificationStore = useNotificationStore();
 const uiStore = useUiStore();
+const userStore = useUserStore();
 const { unreadCount } = storeToRefs(notificationStore);
 const { updateAvailable } = storeToRefs(uiStore);
 const { user, isAuthenticated, logout } = useAuth();
@@ -380,9 +382,11 @@ const isUpdating = ref(false);
 const isStandalone = ref(false);
 
 const isAccountant = computed(() => {
-  // In a real app, this would be derived from the user's custom claims
-  // For now, we can check if the route starts with /accountant or if there's a claim
-  return user.value?.customClaims?.isAccountant === true || route.path.startsWith('/accountant');
+  return userStore.isAccountant || route.path.startsWith('/accountant');
+});
+
+const hasBusinessId = computed(() => {
+  return !!userStore.businessId;
 });
 
 const viewModeBusiness = ref(localStorage.getItem('viewMode_business') === 'true');

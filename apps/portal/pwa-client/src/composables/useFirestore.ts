@@ -55,7 +55,11 @@ export function useFirestore() {
   const getBusinessId = () => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) {
-      throw new Error('No businessId found for current user');
+      // Return a dummy value or throw depending on how we want to handle it.
+      // Throwing here causes the UI to break if a component tries to fetch data
+      // before the router redirects. Let's return a dummy path that will just return empty results
+      // or fail gracefully at the Firestore rules level.
+      return 'NO_BUSINESS_ID';
     }
     return businessId;
   };
@@ -64,12 +68,16 @@ export function useFirestore() {
   const getSuppliersRef = () => collection(db, `businesses/${getBusinessId()}/suppliers`);
 
   const saveInvoiceRecord = async (invoice: Invoice) => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) throw new Error('No business ID found');
     const invoiceDoc = doc(getInvoicesRef(), invoice.id);
     await setDoc(invoiceDoc, invoice, { merge: true });
     return invoice;
   };
 
   const fetchInvoices = async (): Promise<Invoice[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     const snapshot = await getDocs(query(getInvoicesRef(), orderBy('uploadedAt', 'desc')));
     const invoices = snapshot.docs.map((docSnapshot) => docSnapshot.data() as Invoice);
     console.info('[Firestore] fetched invoices', invoices.length);
@@ -77,6 +85,8 @@ export function useFirestore() {
   };
 
   const fetchSuppliers = async (): Promise<Supplier[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     const snapshot = await getDocs(query(getSuppliersRef(), orderBy('name', 'asc')));
     const suppliers = snapshot.docs.map((docSnapshot) => {
       const data = docSnapshot.data() as Supplier;
@@ -90,6 +100,8 @@ export function useFirestore() {
     lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null,
     pageSize: number = 20
   ): Promise<{ invoices: Invoice[]; lastVisible: QueryDocumentSnapshot<DocumentData> | null; hasMore: boolean }> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return { invoices: [], lastVisible: null, hasMore: false };
     let q = query(
       getInvoicesRef(),
       where('supplierId', '==', supplierId),
@@ -111,6 +123,8 @@ export function useFirestore() {
   };
 
   const fetchSupplierInvoice = async (supplierId: string, invoiceId: string): Promise<Invoice | null> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return null;
     const docPath = `businesses/${getBusinessId()}/invoices/${invoiceId}`;
     console.info('[Firestore] fetching document', docPath);
     const invoiceDoc = doc(db, docPath);
@@ -125,6 +139,8 @@ export function useFirestore() {
   };
 
   const fetchUnpaidInvoices = async (): Promise<Invoice[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     const q = query(
       getInvoicesRef(),
       where('paymentStatus', 'in', ['unpaid', 'partially_paid']),
@@ -139,6 +155,8 @@ export function useFirestore() {
   };
 
   const fetchInvoicesByDateRange = async (startDate: Date, endDate: Date): Promise<Invoice[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     const q = query(
       getInvoicesRef(),
       where('uploadedAt', '>=', startDate),
@@ -161,6 +179,8 @@ export function useFirestore() {
    * - clearDeliveryCache() is called (after delivery data updates)
    */
   const fetchSuppliersDeliveringToday = async (): Promise<Supplier[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     // Return cached data if still valid for today
     if (isCacheFresh() && suppliersDeliveringTodayCache) {
       console.info('[Firestore] Using cached suppliers delivering today', suppliersDeliveringTodayCache.length);
@@ -203,6 +223,8 @@ export function useFirestore() {
    * Extracts supplierId from the document reference path and includes downloadedBy.
    */
   const fetchInvoicesByInvoiceDate = async (startDate: Date, endDate: Date): Promise<ExportInvoice[]> => {
+    const businessId = userStore.currentBusinessId;
+    if (!businessId) return [];
     const q = query(
       getInvoicesRef(),
       where('invoiceDate', '>=', Timestamp.fromDate(startDate)),

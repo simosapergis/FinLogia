@@ -1,6 +1,6 @@
 <template>
   <RouterLink
-    :to="`/clients/${client.projectId}/invoices`"
+    :to="`/accountant/clients/${client.projectId}/invoices`"
     class="group flex flex-col rounded-2xl bg-white p-6 shadow-sm transition hover:shadow-lg hover:shadow-primary-500/10"
   >
     <div class="flex items-start justify-between">
@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
 import { Building2, ChevronRight } from 'lucide-vue-next';
-import type { Client } from '@/modules/clients/Client';
+import type { Client } from '@/composables/useClients';
 
 defineProps<{ client: Client }>();
 </script>

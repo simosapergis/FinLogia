@@ -545,20 +545,61 @@ else
         if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
             echo -e "  ${YELLOW}-> Email and password required. Skipping user creation.${NC}"
         else
-            RESPONSE=$(curl -s -X POST \
+            echo -e "  -> Creating admin user and setting Custom Claims..."
+            
+            CREATE_RESPONSE=$(curl -s -X POST \
                 "https://identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts" \
                 -H "Authorization: Bearer ${ACCESS_TOKEN}" \
                 -H "X-Goog-User-Project: ${PROJECT_ID}" \
                 -H "Content-Type: application/json" \
                 -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\",\"displayName\":\"${ADMIN_DISPLAY_NAME}\"}")
 
-            if [[ "$RESPONSE" == *'"localId"'* ]]; then
-                LOCAL_ID=$(echo "$RESPONSE" | grep -o '"localId":"[^"]*"' | cut -d'"' -f4)
-                echo -e "  -> Created admin user: ${ADMIN_EMAIL} (UID: ${LOCAL_ID})"
-            else
-                ERROR_MSG=$(echo "$RESPONSE" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
-                echo -e "  ${YELLOW}-> Warning: Failed to create user: ${ERROR_MSG:-unknown error}${NC}"
-                echo -e "  ${YELLOW}   You can create the user manually in the Firebase Console.${NC}"
+            LOCAL_ID=$(echo "$CREATE_RESPONSE" | grep -o '"localId": *"[^"]*"' | cut -d'"' -f4)
+
+            if [ -z "$LOCAL_ID" ]; then
+                ERROR_MSG=$(echo "$CREATE_RESPONSE" | grep -o '"message": *"[^"]*"' | cut -d'"' -f4)
+                if [[ "$ERROR_MSG" == *"EMAIL_EXISTS"* ]]; then
+                    echo -e "  -> User already exists. Looking up UID..."
+                    LOOKUP_RESPONSE=$(curl -s -X POST \
+                        "https://identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:lookup" \
+                        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                        -H "X-Goog-User-Project: ${PROJECT_ID}" \
+                        -H "Content-Type: application/json" \
+                        -d "{\"email\":[\"${ADMIN_EMAIL}\"]}")
+                    LOCAL_ID=$(echo "$LOOKUP_RESPONSE" | grep -o '"localId": *"[^"]*"' | cut -d'"' -f4)
+                else
+                    echo -e "  ${YELLOW}-> Warning: Failed to create user: ${ERROR_MSG:-unknown error}${NC}"
+                fi
+            fi
+
+            if [ -n "$LOCAL_ID" ]; then
+                echo -e "  -> User UID: ${LOCAL_ID}"
+                
+                CLAIMS_PAYLOAD="{\"isAccountant\":true,\"role\":\"admin\"}"
+                ESCAPED_CLAIMS=$(echo "$CLAIMS_PAYLOAD" | sed 's/"/\\"/g')
+
+                curl -s -X POST \
+                    "https://identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:update" \
+                    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                    -H "X-Goog-User-Project: ${PROJECT_ID}" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"localId\":\"${LOCAL_ID}\",\"customAttributes\":\"${ESCAPED_CLAIMS}\"}" > /dev/null
+                
+                FIRESTORE_PAYLOAD="{
+                  \"fields\": {
+                    \"email\": { \"stringValue\": \"${ADMIN_EMAIL}\" },
+                    \"displayName\": { \"stringValue\": \"${ADMIN_DISPLAY_NAME}\" },
+                    \"createdAt\": { \"timestampValue\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" }
+                  }
+                }"
+
+                curl -s -X PATCH \
+                    "https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/accountants/${LOCAL_ID}" \
+                    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    -d "$FIRESTORE_PAYLOAD" > /dev/null
+                
+                echo -e "  -> Custom claims set and Accountant profile created successfully."
             fi
         fi
     fi

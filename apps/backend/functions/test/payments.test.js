@@ -7,12 +7,14 @@ import { validatePaymentRequest, derivePaymentStatus, validateUpdateFieldsReques
 
 describe('validatePaymentRequest', () => {
   const validFullPayment = {
+    businessId: 'business-1',
     supplierId: 'supplier-1',
     invoiceId: 'invoice-1',
     action: 'pay',
   };
 
   const validPartialPayment = {
+    businessId: 'business-1',
     supplierId: 'supplier-1',
     invoiceId: 'invoice-1',
     action: 'partial',
@@ -152,6 +154,7 @@ describe('derivePaymentStatus', () => {
 
 describe('validateUpdateFieldsRequest', () => {
   const validBody = {
+    businessId: 'business-1',
     supplierId: 'sup-1',
     invoiceId: 'inv-1',
     fields: { supplierName: 'New Name' },
@@ -177,7 +180,7 @@ describe('validateUpdateFieldsRequest', () => {
   });
 
   it('returns early when fields is missing (no field-level errors)', () => {
-    const errors = validateUpdateFieldsRequest({ supplierId: 'sup', invoiceId: 'inv', fields: 'not-object' });
+    const errors = validateUpdateFieldsRequest({ businessId: 'business-1', supplierId: 'sup', invoiceId: 'inv', fields: 'not-object' });
     expect(errors).toEqual(['fields is required and must be an object']);
   });
 
