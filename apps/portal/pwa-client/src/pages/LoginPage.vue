@@ -66,12 +66,16 @@
               <Lock class="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
               <input
                 v-model="state.password"
-                type="password"
+                :type="state.showPassword ? 'text' : 'password'"
                 required
                 autocomplete="current-password"
                 placeholder="••••••••"
-                class="w-full rounded-xl border-2 border-slate-200 py-3 pl-12 pr-4 text-slate-900 transition placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
+                class="w-full rounded-xl border-2 border-slate-200 py-3 pl-12 pr-12 text-slate-900 transition placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
               />
+              <button type="button" @click="state.showPassword = !state.showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <Eye v-if="!state.showPassword" class="h-5 w-5" />
+                <EyeOff v-else class="h-5 w-5" />
+              </button>
             </div>
           </div>
           <button
@@ -95,7 +99,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ReceiptText, FileText, Building2, BarChart3, Mail, Lock, Loader2, AlertCircle } from 'lucide-vue-next';
+import { ReceiptText, FileText, Building2, BarChart3, Mail, Lock, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-vue-next';
 
 import { useAuth } from '@/composables/useAuth';
 import { useNotifications } from '@/composables/useNotifications';
@@ -108,6 +112,7 @@ const { notifySuccess, notifyError } = useNotifications();
 const state = reactive({
   email: '',
   password: '',
+  showPassword: false,
   loading: false,
   error: null as string | null,
 });

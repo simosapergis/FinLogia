@@ -383,6 +383,7 @@ else
         "roles/iam.serviceAccountTokenCreator"
         "roles/iam.serviceAccountUser"
         "roles/storage.admin"
+        "roles/serviceusage.serviceUsageConsumer"
     )
 
     for ROLE in "${ROLES[@]}"; do

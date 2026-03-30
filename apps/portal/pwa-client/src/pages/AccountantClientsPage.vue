@@ -1,8 +1,25 @@
 <template>
   <div class="w-full space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-slate-900 sm:text-3xl">Πελάτες</h1>
-      <p class="mt-1 text-sm text-slate-500">Όλοι οι πελάτες FinLogia που σας έχουν εκχωρηθεί.</p>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 sm:text-3xl">Πελάτες</h1>
+        <p class="mt-1 text-sm text-slate-500">Όλοι οι πελάτες FinLogia που σας έχουν εκχωρηθεί.</p>
+      </div>
+      
+      <div v-if="userStore.role === 'admin'" class="flex flex-wrap gap-2">
+        <button @click="isAddBusinessModalOpen = true" class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          + Επιχείρηση
+        </button>
+        <button @click="isAddUserModalOpen = true" class="inline-flex items-center justify-center rounded-lg bg-white border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          + Χρήστης
+        </button>
+        <button @click="isAddAccountantModalOpen = true" class="inline-flex items-center justify-center rounded-lg bg-white border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          + Λογιστής
+        </button>
+        <button @click="isResetPasswordModalOpen = true" class="inline-flex items-center justify-center rounded-lg bg-white border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          Επαναφορά Κωδικού
+        </button>
+      </div>
     </div>
 
     <div class="relative">
@@ -31,6 +48,32 @@
         :client="client"
       />
     </div>
+
+    <!-- Modals -->
+    <AddBusinessModal
+      :isOpen="isAddBusinessModalOpen"
+      @close="isAddBusinessModalOpen = false"
+      @submit="handleAddBusiness"
+    />
+    
+    <AddUserModal
+      :isOpen="isAddUserModalOpen"
+      :businesses="clients"
+      @close="isAddUserModalOpen = false"
+      @submit="handleAddUser"
+    />
+    
+    <AddAccountantModal
+      :isOpen="isAddAccountantModalOpen"
+      @close="isAddAccountantModalOpen = false"
+      @submit="handleAddAccountant"
+    />
+
+    <ResetPasswordModal
+      :isOpen="isResetPasswordModalOpen"
+      @close="isResetPasswordModalOpen = false"
+      @submit="handleResetPassword"
+    />
   </div>
 </template>
 
@@ -39,10 +82,22 @@ import { computed, onMounted, ref } from 'vue';
 import { Search, Building2 } from 'lucide-vue-next';
 import Loader from '@/components/Loader.vue';
 import AccountantClientCard from '@/components/AccountantClientCard.vue';
+import AddBusinessModal from '@/components/AddBusinessModal.vue';
+import AddUserModal from '@/components/AddUserModal.vue';
+import AddAccountantModal from '@/components/AddAccountantModal.vue';
+import ResetPasswordModal from '@/components/ResetPasswordModal.vue';
 import { useClients } from '@/composables/useClients';
+import { useUserStore } from '@/store/userStore';
+import { createClientBusiness, addUserToBusiness, addAccountant, resetUserPassword } from '@/services/api/adminApi';
 
 const { clients, loading, loadClients } = useClients();
+const userStore = useUserStore();
 const searchQuery = ref('');
+
+const isAddBusinessModalOpen = ref(false);
+const isAddUserModalOpen = ref(false);
+const isAddAccountantModalOpen = ref(false);
+const isResetPasswordModalOpen = ref(false);
 
 const filteredClients = computed(() => {
   if (!searchQuery.value.trim()) return clients.value;
@@ -57,4 +112,45 @@ const filteredClients = computed(() => {
 onMounted(() => {
   loadClients();
 });
+
+const handleAddBusiness = async (data: any) => {
+  try {
+    await createClientBusiness(data);
+    isAddBusinessModalOpen.value = false;
+    await loadClients();
+    alert('Η επιχείρηση δημιουργήθηκε επιτυχώς!');
+  } catch (error: any) {
+    alert('Σφάλμα: ' + error.message);
+  }
+};
+
+const handleAddUser = async (data: any) => {
+  try {
+    await addUserToBusiness(data);
+    isAddUserModalOpen.value = false;
+    alert('Ο χρήστης προστέθηκε επιτυχώς!');
+  } catch (error: any) {
+    alert('Σφάλμα: ' + error.message);
+  }
+};
+
+const handleAddAccountant = async (data: any) => {
+  try {
+    await addAccountant(data);
+    isAddAccountantModalOpen.value = false;
+    alert('Ο λογιστής προστέθηκε επιτυχώς!');
+  } catch (error: any) {
+    alert('Σφάλμα: ' + error.message);
+  }
+};
+
+const handleResetPassword = async (data: any) => {
+  try {
+    await resetUserPassword(data);
+    isResetPasswordModalOpen.value = false;
+    alert('Το email επαναφοράς κωδικού στάλθηκε επιτυχώς!');
+  } catch (error: any) {
+    alert('Σφάλμα: ' + error.message);
+  }
+};
 </script>

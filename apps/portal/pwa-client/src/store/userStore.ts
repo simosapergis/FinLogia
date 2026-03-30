@@ -8,6 +8,7 @@ export const useUserStore = defineStore('user', {
     user: null as User | null,
     businessId: null as string | null,
     isAccountant: false,
+    role: null as string | null,
     _initPromise: null as Promise<void> | null,
     _initUid: null as string | null,
   }),
@@ -35,6 +36,7 @@ export const useUserStore = defineStore('user', {
             // Force refresh token to ensure we have the latest custom claims
             const token = await user.getIdTokenResult(true);
             this.isAccountant = !!token.claims.isAccountant;
+            this.role = (token.claims.role as string) || null;
             
             const db = getFirestore(firebaseApp);
             const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -47,6 +49,7 @@ export const useUserStore = defineStore('user', {
         } else {
           this.businessId = null;
           this.isAccountant = false;
+          this.role = null;
         }
         this.user = user;
       })();

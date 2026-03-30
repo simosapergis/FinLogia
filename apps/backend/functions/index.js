@@ -74,6 +74,13 @@ import {
   recordInvoiceView,
 } from './lib/invoices.js';
 
+import {
+  createClientBusiness,
+  addUserToBusiness,
+  addAccountant,
+  resetUserPassword,
+} from './lib/admin.js';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIGNED UPLOAD URL
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1019,7 +1026,11 @@ export const editFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'businessId is required');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
+  if (user.isAccountant) {
+    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
+  }
+
+  if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1127,7 +1138,11 @@ export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => 
     return sendError(res, 400, 'entryId is required and must be a string');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
+  if (user.isAccountant) {
+    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
+  }
+
+  if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1191,7 +1206,11 @@ export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'businessId is required');
   }
 
-  if (authResult.user.businessId !== businessId && !authResult.user.isAccountant) {
+  if (authResult.user.isAccountant) {
+    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
+  }
+
+  if (authResult.user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1643,6 +1662,10 @@ export const recordInvoiceView_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
+  if (!user.isAccountant) {
+    return res.status(200).json({ success: true, message: 'View not recorded for non-accountants' });
+  }
+
   try {
     await recordInvoiceView({
       businessId,
@@ -1801,3 +1824,117 @@ export const exportInvoices_v2 = onRequest(EXPORT_OPTS, async (req, res) => {
     });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMIN FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const createClientBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  if (!user.isAccountant || user.role !== 'admin') {
+    return sendError(res, 403, 'Only admin accountants can perform this action');
+  }
+
+  const { businessId, displayName, email, password } = req.body || {};
+  if (!businessId || !displayName || !email) {
+    return sendError(res, 400, 'Missing required fields');
+  }
+
+  try {
+    const projectId = process.env.GCLOUD_PROJECT || 'finlogia-amiseli';
+    const result = await createClientBusiness({ businessId, displayName, email, password, projectId });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Failed to create client business:', error);
+    return sendError(res, 500, 'Αποτυχία δημιουργίας επιχείρησης', { details: error.message });
+  }
+});
+
+export const addUserToBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  if (!user.isAccountant || user.role !== 'admin') {
+    return sendError(res, 403, 'Only admin accountants can perform this action');
+  }
+
+  const { businessId, email, password, displayName, role } = req.body || {};
+  if (!businessId || !email || !displayName || !role) {
+    return sendError(res, 400, 'Missing required fields');
+  }
+
+  try {
+    const result = await addUserToBusiness({ businessId, email, password, displayName, role });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Failed to add user to business:', error);
+    return sendError(res, 500, 'Αποτυχία προσθήκης χρήστη', { details: error.message });
+  }
+});
+
+export const addAccountant_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  if (!user.isAccountant || user.role !== 'admin') {
+    return sendError(res, 403, 'Only admin accountants can perform this action');
+  }
+
+  const { email, password, displayName, role } = req.body || {};
+  if (!email || !displayName || !role) {
+    return sendError(res, 400, 'Missing required fields');
+  }
+
+  try {
+    const result = await addAccountant({ email, password, displayName, role });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Failed to add accountant:', error);
+    return sendError(res, 500, 'Αποτυχία προσθήκης λογιστή', { details: error.message });
+  }
+});
+
+export const resetUserPassword_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  if (!user.isAccountant || user.role !== 'admin') {
+    return sendError(res, 403, 'Only admin accountants can perform this action');
+  }
+
+  const { email } = req.body || {};
+  if (!email) {
+    return sendError(res, 400, 'Missing required fields');
+  }
+
+  try {
+    const result = await resetUserPassword({ email });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Failed to reset password:', error);
+    return sendError(res, 500, 'Αποτυχία επαναφοράς κωδικού', { details: error.message });
+  }
+});
+
