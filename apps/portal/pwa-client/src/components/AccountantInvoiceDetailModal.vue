@@ -57,16 +57,60 @@
                 <dd class="mt-1 text-sm font-semibold text-slate-900">{{ invoice.invoiceNumber || '—' }}</dd>
               </div>
               <div>
+                <dt class="text-xs font-medium text-slate-400">Τύπος</dt>
+                <dd class="mt-1 text-sm font-semibold" :class="invoice.isCredit ? 'text-indigo-600' : 'text-slate-900'">
+                  {{ invoice.isCredit ? 'Πιστωτικό' : 'Χρεωστικό' }}
+                </dd>
+              </div>
+              <div>
                 <dt class="text-xs font-medium text-slate-400">Προμηθευτής</dt>
                 <dd class="mt-1 text-sm font-semibold text-slate-900">{{ invoice.supplierName || invoice.supplierId }}</dd>
               </div>
               <div>
-                <dt class="text-xs font-medium text-slate-400">Ημερομηνία</dt>
+                <dt class="text-xs font-medium text-slate-400">Α.Φ.Μ. Προμηθευτή</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ invoice.supplierTaxNumber || '—' }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Ημερομηνία Έκδοσης</dt>
                 <dd class="mt-1 text-sm text-slate-700">{{ formatInvoiceDate(invoice.invoiceDate) }}</dd>
               </div>
               <div>
-                <dt class="text-xs font-medium text-slate-400">Ποσό</dt>
-                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ formatCurrency(invoice.totalAmount) }}</dd>
+                <dt class="text-xs font-medium text-slate-400">Ημερομηνία Μεταφόρτωσης</dt>
+                <dd class="mt-1 text-sm text-slate-700">{{ formatInvoiceDate(invoice.uploadedAt) }}</dd>
+              </div>
+              <div v-if="invoice.uploadedByName">
+                <dt class="text-xs font-medium text-slate-400">Καταχωρήθηκε Από</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ invoice.uploadedByName }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Καθαρό Ποσό</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ formatCurrency(getDisplayAmount(invoice.netAmount), true) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Φ.Π.Α.</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ formatCurrency(getDisplayAmount(invoice.vatAmount), true) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Συνολικό Ποσό</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ formatCurrency(getDisplayAmount(invoice.totalAmount), true) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Εξοφλημένο Ποσό</dt>
+                <dd class="mt-1 text-sm font-semibold text-emerald-600">{{ formatCurrency(getDisplayAmount(invoice.paidAmount), true) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-400">Ανεξόφλητο Ποσό</dt>
+                <dd class="mt-1 text-sm font-semibold" :class="(invoice.unpaidAmount ?? 0) > 0 ? 'text-amber-600' : 'text-emerald-600'">
+                  {{ formatCurrency(getDisplayAmount(invoice.unpaidAmount), true) }}
+                </dd>
+              </div>
+              <div v-if="!invoice.isCredit && creditUsedNotes.length > 0" class="sm:col-span-2">
+                <dt class="text-xs font-medium text-slate-400">Συνδεδεμένα Πιστωτικά</dt>
+                <dd class="mt-1 text-sm font-medium text-indigo-600">
+                  <span v-for="(note, index) in creditUsedNotes" :key="index" class="block">
+                    {{ note }}
+                  </span>
+                </dd>
               </div>
             </dl>
 
@@ -97,11 +141,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseApp } from '@/services/firebase';
 import { X, ExternalLink, Check, X as XIcon } from 'lucide-vue-next';
-import type { InvoiceDetail } from '@/modules/invoices/Invoice';
+import type { Invoice as InvoiceDetail } from '@/modules/invoices/InvoiceMapper';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
 import { recordInvoiceView } from '@/services/api/invoicesApi';
 import { formatCurrency, formatDateTime } from '@/utils/date';
@@ -135,6 +179,24 @@ function formatInvoiceDate(date: unknown): string {
   }
   return formatDateTime(date as Date);
 }
+
+const getDisplayAmount = (amount?: number) => {
+  if (!amount) return 0;
+  return invoice.value?.isCredit ? -amount : amount;
+};
+
+const creditUsedNotes = computed(() => {
+  if (!invoice.value?.paymentHistory || invoice.value.paymentHistory.length === 0) return [];
+  
+  const notes: string[] = [];
+  for (const entry of invoice.value.paymentHistory) {
+    if (entry.creditInvoiceId) {
+      const amount = formatCurrency(entry.creditAmountUsed ?? 0);
+      notes.push(`Χρήση Πιστωτικού: ΠΤ-${entry.notes?.match(/αριθμό (.+)/)?.[1] || entry.creditInvoiceId} (€ ${amount})`);
+    }
+  }
+  return notes;
+});
 
 watch(
   () => props.visible,
