@@ -22,12 +22,13 @@ export function useClients() {
     error.value = '';
     try {
       const snapshot = await getDocs(collection(db, 'businesses'));
-      clients.value = snapshot.docs.map(doc => ({
+      const fetchedClients = snapshot.docs.map(doc => ({
         id: doc.id,
         projectId: doc.id, // Map businessId to projectId for now
         displayName: doc.data().displayName || doc.id,
         bucketName: doc.data().bucketName || '',
       }));
+      clients.value = fetchedClients.sort((a, b) => a.displayName.localeCompare(b.displayName, 'el'));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Αποτυχία φόρτωσης πελατών';
       error.value = message;
