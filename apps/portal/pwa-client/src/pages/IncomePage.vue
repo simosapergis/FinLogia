@@ -33,18 +33,18 @@
       </h3>
 
       <!-- Date Selector -->
-      <div class="mb-6">
+      <div class="mb-6 w-full">
         <label class="mb-2 block text-sm font-medium text-slate-700">Ημερομηνία</label>
-        <div class="relative">
+        <div class="relative flex w-full items-center">
           <input
             v-model="entryDate"
             type="date"
             lang="el-GR"
-            class="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
+            class="w-full flex-1 min-w-0 max-w-full appearance-none min-h-[52px] rounded-xl border-2 border-slate-200 bg-white px-3 py-3 text-sm sm:text-base text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
           />
           <span
             v-if="!entryDate"
-            class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-12 flex items-center rounded-lg bg-white pl-4 text-slate-400"
+            class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-10 flex items-center rounded-lg bg-white pl-3 text-sm sm:text-base text-slate-400"
             aria-hidden="true"
           >ηη/μμ/εεεε</span>
         </div>
@@ -167,37 +167,37 @@
         </div>
 
         <!-- Custom Date Range -->
-        <div class="grid grid-cols-2 gap-4">
-          <div>
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
+          <div class="w-full min-w-0">
             <label class="mb-2 block text-sm font-medium text-slate-700">Από</label>
-            <div class="relative">
+            <div class="relative flex w-full items-center">
               <input
                 v-model="searchStartDate"
                 type="date"
                 lang="el-GR"
-                class="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
+                class="w-full flex-1 min-w-0 max-w-full appearance-none min-h-[52px] rounded-xl border-2 border-slate-200 bg-white px-2 sm:px-3 py-3 text-sm sm:text-base text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
                 @change="selectedPeriod = 'custom'"
               />
               <span
                 v-if="!searchStartDate"
-                class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-12 flex items-center rounded-lg bg-white pl-4 text-slate-400"
+                class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-8 flex items-center rounded-lg bg-white pl-2 sm:pl-3 text-sm sm:text-base text-slate-400"
                 aria-hidden="true"
               >ηη/μμ/εεεε</span>
             </div>
           </div>
-          <div>
+          <div class="w-full min-w-0">
             <label class="mb-2 block text-sm font-medium text-slate-700">Έως</label>
-            <div class="relative">
+            <div class="relative flex w-full items-center">
               <input
                 v-model="searchEndDate"
                 type="date"
                 lang="el-GR"
-                class="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
+                class="w-full flex-1 min-w-0 max-w-full appearance-none min-h-[52px] rounded-xl border-2 border-slate-200 bg-white px-2 sm:px-3 py-3 text-sm sm:text-base text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
                 @change="selectedPeriod = 'custom'"
               />
               <span
                 v-if="!searchEndDate"
-                class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-12 flex items-center rounded-lg bg-white pl-4 text-slate-400"
+                class="pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] right-8 flex items-center rounded-lg bg-white pl-2 sm:pl-3 text-sm sm:text-base text-slate-400"
                 aria-hidden="true"
               >ηη/μμ/εεεε</span>
             </div>

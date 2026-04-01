@@ -76,14 +76,14 @@
               </div>
 
               <!-- Date -->
-              <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+              <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100 w-full">
                 <label class="text-xs uppercase tracking-wide text-slate-400">Ημερομηνία</label>
-                <div class="relative mt-1">
+                <div class="relative mt-1 flex w-full items-center">
                   <input
                     v-model="form.date"
                     type="date"
                     lang="el-GR"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
+                    class="w-full flex-1 min-w-0 max-w-full appearance-none min-h-[46px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
                   />
                   <span
                     v-if="!form.date"
