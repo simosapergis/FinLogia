@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "firebase": "^11.0.0",
@@ -17,10 +18,14 @@
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@pinia/testing": "^1.0.3",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^20.11.10",
     "@vitejs/plugin-basic-ssl": "^1.2.0",
     "@vitejs/plugin-vue": "^5.1.2",
+    "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.19",
+    "happy-dom": "^20.8.9",
     "postcss": "^8.4.33",
     "stringify-object": "^6.0.0",
     "tailwindcss": "^3.4.14",

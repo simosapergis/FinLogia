@@ -60,7 +60,7 @@ export default defineConfig({
     port: 5173,
   },
   test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
+    environment: 'happy-dom',
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
   } satisfies UserConfig['test'],
 });

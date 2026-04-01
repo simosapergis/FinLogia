@@ -1,0 +1,75 @@
+name: PR Dry Run (Staging)
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  dry-run-deploy:
+    runs-on: ubuntu-latest
+    # We use a dedicated staging project for PR dry runs
+    env:
+      STAGING_PROJECT: finlogia-staging-tenant
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java (for Firebase Emulators)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install Backend Dependencies
+        run: npm ci
+        working-directory: apps/backend
+
+      - name: Install Backend Functions Dependencies
+        run: npm ci
+        working-directory: apps/backend/functions
+
+      - name: Run Backend Integration Tests
+        run: npm run test:integration
+        working-directory: apps/backend
+
+      - name: Run Security Rules Tests (with Emulators)
+        run: npm run test:rules
+        working-directory: apps/backend
+
+      - name: Install Portal Dependencies
+        run: npm ci
+        working-directory: apps/portal/pwa-client
+
+      - name: Run Portal Unit Tests
+        run: npm run test
+        working-directory: apps/portal/pwa-client
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+        working-directory: apps/portal/pwa-client
+
+      - name: Run Portal E2E Tests
+        run: npm run test:e2e
+        working-directory: apps/portal/pwa-client
+
+      # In a real setup, you would authenticate and deploy to the staging project here
+      # just like in deploy.yml, to ensure the build and deploy steps actually work.
+      # - name: Authenticate to Google Cloud
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     credentials_json: ${{ secrets.GCP_SA_KEY_STAGING }}
+      
+      # - name: Deploy Backend to Staging
+      #   run: firebase deploy --only functions,firestore:rules,storage:rules --project $STAGING_PROJECT --force
+      #   working-directory: apps/backend

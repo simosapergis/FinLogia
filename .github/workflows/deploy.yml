@@ -1,0 +1,177 @@
+name: Deploy to All Offices
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  pre-deploy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java (for Firebase Emulators)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install Backend Dependencies
+        run: npm ci
+        working-directory: apps/backend
+
+      - name: Install Backend Functions Dependencies
+        run: npm ci
+        working-directory: apps/backend/functions
+
+      - name: Run Backend Integration Tests
+        run: npm run test:integration
+        working-directory: apps/backend
+
+      - name: Run Security Rules Tests (with Emulators)
+        run: npm run test:rules
+        working-directory: apps/backend
+
+  prepare-matrix:
+    needs: pre-deploy-tests
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Matrix
+        id: set-matrix
+        # In a real scenario, this could read from a JSON file or a script
+        # For now, we assume a clients.json file exists in the root or apps/portal
+        run: |
+          if [ -f "apps/portal/clients.json" ]; then
+            # Extract project IDs as a JSON array
+            PROJECTS=$(jq -c '[.[] | .projectId]' apps/portal/clients.json)
+            echo "matrix={\"project\":$PROJECTS}" >> $GITHUB_OUTPUT
+          else
+            # Fallback to a default or fail
+            echo "matrix={\"project\":[\"finlogia-demo\"]}" >> $GITHUB_OUTPUT
+          fi
+
+  deploy-backend:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+      fail-fast: false # Don't fail all deployments if one fails
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/backend/functions
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }} # A service account with permissions across projects, or use Workload Identity Federation
+
+      - name: Setup Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Backend to ${{ matrix.project }}
+        run: firebase deploy --only functions,firestore:rules,storage:rules --project ${{ matrix.project }} --force
+        working-directory: apps/backend
+
+  deploy-portal:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/portal/pwa-client
+
+      - name: Generate Config for ${{ matrix.project }}
+        run: |
+          # Extract client config
+          CLIENT_CONFIG=$(jq -c ".[] | select(.projectId == \"${{ matrix.project }}\")" clients.json)
+          
+          # Generate .env.local
+          echo "VITE_FIREBASE_API_KEY=$(echo $CLIENT_CONFIG | jq -r .apiKey)" > .env.local
+          echo "VITE_FIREBASE_AUTH_DOMAIN=$(echo $CLIENT_CONFIG | jq -r .authDomain)" >> .env.local
+          echo "VITE_FIREBASE_PROJECT_ID=${{ matrix.project }}" >> .env.local
+          echo "VITE_FIREBASE_STORAGE_BUCKET=$(echo $CLIENT_CONFIG | jq -r .storageBucket)" >> .env.local
+          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=$(echo $CLIENT_CONFIG | jq -r .messagingSenderId)" >> .env.local
+          echo "VITE_FIREBASE_APP_ID=$(echo $CLIENT_CONFIG | jq -r .appId)" >> .env.local
+        working-directory: apps/portal/pwa-client
+
+      - name: Verify Config Matches Project
+        run: |
+          if ! grep -q "VITE_FIREBASE_PROJECT_ID=${{ matrix.project }}" .env.local; then
+            echo "Error: Config mismatch! Expected project ${{ matrix.project }} but got something else."
+            exit 1
+          fi
+        working-directory: apps/portal/pwa-client
+
+      - name: Build Portal for ${{ matrix.project }}
+        run: npm run build
+        working-directory: apps/portal/pwa-client
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Portal to ${{ matrix.project }}
+        run: firebase deploy --only hosting --project ${{ matrix.project }}
+        working-directory: apps/portal/pwa-client
+
+      - name: Post-Deployment Smoke Test
+        run: |
+          # Wait a few seconds for CDN propagation
+          sleep 5
+          # Curl the deployed URL and verify it returns a 200 OK and contains the app title
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://${{ matrix.project }}.web.app)
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Error: Smoke test failed with HTTP status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          if ! curl -s https://${{ matrix.project }}.web.app | grep -q "<title>FinLogia</title>"; then
+            echo "Error: Smoke test failed, could not find <title>FinLogia</title> in response"
+            exit 1
+          fi
+          echo "Smoke test passed successfully!"
