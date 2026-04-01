@@ -411,6 +411,13 @@ else
         --condition=None \
         >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Artifact Registry reader role.${NC}"
 
+            echo -e "  -> Firebase Admin SDK SA: roles/serviceusage.serviceUsageConsumer ..."
+            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+                --member="serviceAccount:firebase-adminsdk-fbsvc@${PROJECT_ID}.iam.gserviceaccount.com" \
+                --role="roles/serviceusage.serviceUsageConsumer" \
+                --condition=None \
+                >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Service Usage Consumer role to Firebase Admin SDK SA.${NC}"
+
     echo -e "  -> Eventarc SA: roles/eventarc.serviceAgent ..."
     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
         --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-eventarc.iam.gserviceaccount.com" \
