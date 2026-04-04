@@ -34,6 +34,11 @@ vi.mock('firebase-admin', () => {
     default: {
       initializeApp: vi.fn(),
       firestore: firestoreFn,
+      app: () => ({
+        options: {
+          projectId: 'mock-project-id',
+        },
+      }),
     },
   };
 });
@@ -50,16 +55,25 @@ vi.mock('@google-cloud/storage', () => ({
   },
 }));
 
-vi.mock('@google-cloud/vision', () => ({
-  default: {
-    ImageAnnotatorClient: class MockImageAnnotatorClient {
-      documentTextDetection() {
-        return Promise.resolve([{}]);
-      }
-      batchAnnotateFiles() {
-        return Promise.resolve([{ responses: [{ responses: [] }] }]);
-      }
-    },
+vi.mock('@google-cloud/vertexai', () => ({
+  VertexAI: class MockVertexAI {
+    constructor() {
+      this.preview = {
+        getGenerativeModel: vi.fn().mockReturnValue({
+          generateContent: vi.fn().mockResolvedValue({
+            response: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '{}' }],
+                  },
+                },
+              ],
+            },
+          }),
+        }),
+      };
+    }
   },
 }));
 
@@ -71,16 +85,4 @@ vi.mock('firebase-functions/params', () => ({
   defineString: (name, options) => ({
     value: () => options?.default || `mock-${name}`,
   }),
-}));
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Mock OpenAI
-// ═══════════════════════════════════════════════════════════════════════════════
-
-vi.mock('openai', () => ({
-  default: class MockOpenAI {
-    constructor() {
-      this.responses = { create: vi.fn() };
-    }
-  },
 }));

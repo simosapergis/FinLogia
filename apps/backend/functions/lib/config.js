@@ -1,6 +1,6 @@
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
-import vision from '@google-cloud/vision';
+import { VertexAI } from '@google-cloud/vertexai';
 import { defineString } from 'firebase-functions/params';
 
 admin.initializeApp();
@@ -8,19 +8,21 @@ admin.initializeApp();
 const storage = new Storage();
 const db = admin.firestore();
 
-// Lazy-initialize Vision client — only processInvoiceDocument_v2 uses it
-let _visionClient = null;
-function getVisionClient() {
-  if (!_visionClient) {
-    _visionClient = new vision.ImageAnnotatorClient();
+// Lazy-initialize Vertex AI client
+let _vertexAiClient = null;
+function getVertexAIClient() {
+  if (!_vertexAiClient) {
+    _vertexAiClient = new VertexAI({
+      project: process.env.GCLOUD_PROJECT || admin.app().options.projectId,
+      location: 'europe-west3',
+    });
   }
-  return _visionClient;
+  return _vertexAiClient;
 }
 
 // Define environment parameters (type-safe, validated at deploy time)
 const SERVICE_ACCOUNT_EMAIL = defineString('SERVICE_ACCOUNT_EMAIL');
 const REGION = defineString('REGION', { default: 'europe-west3' });
-const OPENAI_API_KEY = defineString('OPENAI_API_KEY');
 const GCS_BUCKET = defineString('GCS_BUCKET');
 
 const UPLOADS_PREFIX = 'uploads/';
@@ -66,10 +68,9 @@ export {
   admin,
   db,
   storage,
-  getVisionClient,
+  getVertexAIClient,
   SERVICE_ACCOUNT_EMAIL,
   REGION,
-  OPENAI_API_KEY,
   GCS_BUCKET,
   UPLOADS_PREFIX,
   METADATA_INVOICE_COLLECTION,

@@ -51,3 +51,9 @@ Flat structure scoped by `businessId`:
 - Do not expose Cloud Storage buckets directly; use signed URLs.
 - Do not commit secrets or `.env` files.
 - Do not leave temporary scripts or files (e.g., one-off Node.js or bash scripts) in the workspace; always delete them after use.
+
+## 6. AI & OCR Architecture
+
+- **Invoice Processing**: We use Google Cloud Vertex AI with the `gemini-2.5-flash` multimodal model to process uploaded invoices directly from Cloud Storage (`gs://` URIs).
+- **Cost Optimization**: We bypass the Cloud Vision API and OpenAI entirely. Gemini directly reads the images/PDFs and outputs structured JSON.
+- **Regions**: We use the default project region (e.g., `europe-west3`) for Vertex AI calls since `gemini-2.5-flash` is available there.

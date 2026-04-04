@@ -14,7 +14,6 @@ import {
   FIELD_LABELS,
   formatMetadataError,
   formatMetadataSuccess,
-  getOpenAIClient,
   parseAmount,
   parseDate,
   runInvoiceOcr,
@@ -42,17 +41,6 @@ async function processInvoiceDocumentHandler(event) {
   }
 
   if (after.status !== INVOICE_STATUS.ready) {
-    return;
-  }
-
-  const openaiClient = getOpenAIClient();
-  if (!openaiClient) {
-    console.warn('OPENAI_API_KEY not configured; unable to run OCR.');
-    await change.after.ref.update({
-      status: INVOICE_STATUS.error,
-      errorMessage: 'Αποτυχία OCR, το OPENAI_API_KEY λείπει.',
-      updatedAt: serverTimestamp(),
-    });
     return;
   }
 
@@ -125,27 +113,10 @@ async function processInvoiceDocumentHandler(event) {
   const isSinglePdf = pages.length === 1 && pages[0].contentType === 'application/pdf';
 
   try {
-    let pagesToOcr;
-    let combinedPdfBuffer;
-
-    if (isSinglePdf) {
-      // PDF path: Vision reads directly from GCS, no download needed for OCR
-      const pdfPage = pages[0];
-      pagesToOcr = [
-        {
-          mimeType: 'application/pdf',
-          bucketName: pdfPage.bucket || bucketName,
-          objectName: pdfPage.objectName,
-          totalPages: invoiceData.totalPages || null,
-          pageNumber: 1,
-        },
-      ];
-    } else {
-      // Image path: download all pages, combine into a single PDF
-      const result = await buildCombinedPdfFromPages(pages, bucketName);
-      combinedPdfBuffer = result.combinedPdfBuffer;
-      pagesToOcr = result.downloadedPages;
-    }
+    const pagesToOcr = pages.map((p) => ({
+      ...p,
+      bucketName: p.bucket || bucketName,
+    }));
 
     const ocrResult = await runInvoiceOcr(pagesToOcr);
     if (!ocrResult) {
@@ -226,6 +197,9 @@ async function processInvoiceDocumentHandler(event) {
         const destFile = storage.bucket(bucketName).file(pdfObjectPath);
         await sourceFile.copy(destFile);
       } else {
+        const result = await buildCombinedPdfFromPages(pages, bucketName);
+        const combinedPdfBuffer = result.combinedPdfBuffer;
+
         await storage
           .bucket(bucketName)
           .file(pdfObjectPath)

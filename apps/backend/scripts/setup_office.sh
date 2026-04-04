@@ -59,15 +59,6 @@ if [ -z "$DISPLAY_NAME" ]; then
     echo -e "  ${YELLOW}-> No display name provided. Using project ID: ${DISPLAY_NAME}${NC}"
 fi
 
-echo -e "${YELLOW}Please enter the OpenAI API Key for this project:${NC} \c"
-read -s OPENAI_API_KEY
-echo ""
-
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo -e "${RED}OpenAI API Key cannot be empty. Exiting.${NC}"
-    exit 1
-fi
-
 echo -e "\n${CYAN}Fetching available Organizations...${NC}"
 ORGS_LIST=$(gcloud organizations list --format="value(displayName,name)" || true)
 ORG_COUNT=$(echo "$ORGS_LIST" | grep -c . || true)
@@ -232,7 +223,7 @@ else
         cloudfunctions.googleapis.com \
         firestore.googleapis.com \
         storage.googleapis.com \
-        vision.googleapis.com \
+        aiplatform.googleapis.com \
         cloudbuild.googleapis.com \
         eventarc.googleapis.com \
         run.googleapis.com \
@@ -411,6 +402,13 @@ else
         --condition=None \
         >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Artifact Registry reader role.${NC}"
 
+    echo -e "  -> App Engine default SA: roles/aiplatform.user ..."
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+        --member="serviceAccount:${PROJECT_ID}@appspot.gserviceaccount.com" \
+        --role="roles/aiplatform.user" \
+        --condition=None \
+        >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Vertex AI user role.${NC}"
+
             echo -e "  -> Firebase Admin SDK SA: roles/serviceusage.serviceUsageConsumer ..."
             gcloud projects add-iam-policy-binding "$PROJECT_ID" \
                 --member="serviceAccount:firebase-adminsdk-fbsvc@${PROJECT_ID}.iam.gserviceaccount.com" \
@@ -501,7 +499,6 @@ else
     cat > "functions/.env.${PROJECT_ID}" << EOF
 SERVICE_ACCOUNT_EMAIL=${SA_EMAIL}
 REGION=europe-west3
-OPENAI_API_KEY=${OPENAI_API_KEY}
 GCS_BUCKET=${PROJECT_ID}.appspot.com
 EOF
     echo -e "  -> Created functions/.env.${PROJECT_ID}"
@@ -714,6 +711,61 @@ else
     echo ""
 
     mark_step_done "register_web_app"
+fi
+
+# ── 16. Create Initial Client Business ──────────────────────────────────────────
+
+if [ -n "$LOCAL_ID" ] && [ -n "$ADMIN_EMAIL" ]; then
+    echo -e "\n${YELLOW}Would you like to create an initial client business for this office and assign the admin to it? (y/N):${NC} \c"
+    read -r CREATE_BUSINESS
+
+    if [[ "$CREATE_BUSINESS" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Enter the Business ID (lowercase, no spaces, e.g. 'demo-corp'):${NC} \c"
+        read -r BUSINESS_ID
+        echo -e "${YELLOW}Enter the Business Display Name (e.g. 'Demo Corporation'):${NC} \c"
+        read -r BUSINESS_NAME
+
+        if [ -n "$BUSINESS_ID" ] && [ -n "$BUSINESS_NAME" ]; then
+            echo -e "  -> Provisioning Business in Firestore..."
+            
+            # 1. Create the Business Profile
+            BUSINESS_PAYLOAD="{
+              \"fields\": {
+                \"displayName\": { \"stringValue\": \"${BUSINESS_NAME}\" },
+                \"bucketName\": { \"stringValue\": \"${PROJECT_ID}.appspot.com\" },
+                \"createdAt\": { \"timestampValue\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" }
+              }
+            }"
+
+            curl -s -X PATCH \
+                "https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/businesses/${BUSINESS_ID}" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$BUSINESS_PAYLOAD" > /dev/null
+
+            echo -e "  -> Business profile created at /businesses/${BUSINESS_ID}"
+
+            # 2. Map the Admin User to the Business
+            USER_PAYLOAD="{
+              \"fields\": {
+                \"businessId\": { \"stringValue\": \"${BUSINESS_ID}\" },
+                \"email\": { \"stringValue\": \"${ADMIN_EMAIL}\" },
+                \"role\": { \"stringValue\": \"owner\" },
+                \"createdAt\": { \"timestampValue\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" }
+              }
+            }"
+
+            curl -s -X PATCH \
+                "https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${LOCAL_ID}" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$USER_PAYLOAD" > /dev/null
+
+            echo -e "  -> Admin user mapped to business at /users/${LOCAL_ID}"
+        else
+            echo -e "  ${YELLOW}-> Business ID and Name required. Skipping business creation.${NC}"
+        fi
+    fi
 fi
 
 # ── Done ────────────────────────────────────────────────────────────────────────

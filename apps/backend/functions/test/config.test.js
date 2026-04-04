@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { getVisionClient, getAthensToday, formatAthensDate } from '../lib/config.js';
+import { getVertexAIClient, getAthensToday, formatAthensDate } from '../lib/config.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// getVisionClient
+// getVertexAIClient
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('getVisionClient', () => {
-  it('returns a Vision ImageAnnotatorClient instance', () => {
-    const client = getVisionClient();
+describe('getVertexAIClient', () => {
+  it('returns a VertexAI instance', () => {
+    const client = getVertexAIClient();
     expect(client).toBeDefined();
-    expect(typeof client.documentTextDetection).toBe('function');
+    expect(typeof client.preview.getGenerativeModel).toBe('function');
   });
 
   it('returns the same instance on repeated calls (singleton)', () => {
-    const a = getVisionClient();
-    const b = getVisionClient();
+    const a = getVertexAIClient();
+    const b = getVertexAIClient();
     expect(a).toBe(b);
   });
 });

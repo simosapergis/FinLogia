@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import { admin, getVisionClient, OPENAI_API_KEY } from './config.js';
+import { admin, getVertexAIClient } from './config.js';
 
 const REQUIRED_FIELDS = [
   'ΗΜΕΡΟΜΗΝΙΑ',
@@ -45,34 +44,7 @@ function formatMetadataSuccess(invoiceNumber, supplierName) {
   return METADATA_SUCCESS_MESSAGE.replace('%s', invoiceNumber).replace('%s', supplierName);
 }
 
-// Initialize OpenAI client - params are evaluated lazily
-let openaiClient = null;
-function getOpenAIClient() {
-  if (!openaiClient) {
-    const apiKey = OPENAI_API_KEY.value();
-    openaiClient = apiKey ? new OpenAI({ apiKey }) : null;
-  }
-  return openaiClient;
-}
 const OCR_MAX_RETRIES = 3;
-
-function collectResponseText(response) {
-  const chunks = [];
-  if (Array.isArray(response?.output)) {
-    for (const block of response.output) {
-      if (!Array.isArray(block?.content)) continue;
-      for (const part of block.content) {
-        if (typeof part?.text === 'string') chunks.push(part.text);
-        else if (typeof part?.output_text === 'string') chunks.push(part.output_text);
-        else if (typeof part?.value === 'string') chunks.push(part.value);
-      }
-    }
-  }
-  if (Array.isArray(response?.output_text)) {
-    chunks.push(...response.output_text);
-  }
-  return chunks.join('\n').trim();
-}
 
 function parseJsonFromResponse(text) {
   if (!text) throw new Error('Empty OCR response');
@@ -85,23 +57,10 @@ function parseJsonFromResponse(text) {
   }
 }
 
-/**
- * Normalize European decimal format in OCR text before sending to GPT.
- * Converts "2.383,13" → "2383.13" so GPT sees standard decimal notation.
- */
-function normalizeEuropeanDecimals(text) {
-  // Match European format: optional thousands separators (.) followed by comma decimal
-  // Examples: 2.383,13 | 383,13 | 1.234.567,89
-  return text.replace(
-    /\b(\d{1,3}(?:\.\d{3})*),(\d{1,2})\b/g,
-    (_, intPart, decPart) => intPart.replace(/\./g, '') + '.' + decPart
-  );
-}
-
 function parseAmount(value) {
   if (value === null || value === undefined) return null;
 
-  // Remove everything except digits, dot, and minus (decimals already normalized before GPT)
+  // Remove everything except digits, dot, and minus
   const str = value.toString().replace(/[^\d.-]/g, '');
   if (!str) return null;
 
@@ -140,9 +99,9 @@ function parseDate(value) {
 }
 
 async function runInvoiceOcr(pageBuffers) {
-  const client = getOpenAIClient();
+  const client = getVertexAIClient();
   if (!client) {
-    console.warn('OPENAI_API_KEY not configured; skipping OCR.');
+    console.warn('Vertex AI client not configured; skipping OCR.');
     return null;
   }
 
@@ -152,9 +111,9 @@ async function runInvoiceOcr(pageBuffers) {
   }
 
   // First+last page optimization for image uploads (>2 pages).
-  // PDF uploads handle this via the Vision API `pages` parameter in runInvoiceOcrAttempt.
+  // PDF uploads handle this via the Gemini `pages` parameter or we just pass the whole PDF.
   let effectivePages = pageBuffers;
-  const isImageUpload = pageBuffers.length > 0 && pageBuffers[0].mimeType !== 'application/pdf';
+  const isImageUpload = pageBuffers.length > 0 && (pageBuffers[0].contentType || pageBuffers[0].mimeType) !== 'application/pdf';
   if (isImageUpload && pageBuffers.length > 2) {
     const sorted = [...pageBuffers].sort((a, b) => a.pageNumber - b.pageNumber);
     effectivePages = [sorted[0], sorted[sorted.length - 1]];
@@ -185,85 +144,49 @@ async function runInvoiceOcr(pageBuffers) {
 }
 
 async function runInvoiceOcrAttempt(pageBuffers) {
-  const client = getOpenAIClient();
-  const aggregatedText = [];
+  const client = getVertexAIClient();
+  
+  const generativeModel = client.preview.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          ΗΜΕΡΟΜΗΝΙΑ: { type: 'STRING', nullable: true },
+          'ΑΡΙΘΜΟΣ ΤΙΜΟΛΟΓΙΟΥ': { type: 'STRING', nullable: true },
+          'ΑΦΜ ΠΡΟΜΗΘΕΥΤΗ': { type: 'STRING', nullable: true },
+          ΠΡΟΜΗΘΕΥΤΗΣ: { type: 'STRING', nullable: true },
+          'ΚΑΘΑΡΗ ΑΞΙΑ': { type: 'STRING', nullable: true },
+          ΦΠΑ: { type: 'STRING', nullable: true },
+          ΠΛΗΡΩΤΕΟ: { type: 'STRING', nullable: true },
+          ΤΥΠΟΣ_ΠΑΡΑΣΤΑΤΙΚΟΥ: { type: 'STRING', enum: ['ΧΡΕΩΣΤΙΚΟ', 'ΠΙΣΤΩΤΙΚΟ'] },
+          ΑΚΡΙΒΕΙΑ: { type: 'STRING', nullable: true },
+        },
+        required: REQUIRED_FIELDS,
+      }
+    },
+  });
+
+  const parts = [];
+
   for (const page of pageBuffers) {
-    const mimeType = page.mimeType || 'application/octet-stream';
-
-    if (mimeType === 'application/pdf') {
-      try {
-        const gcsUri = `gs://${page.bucketName}/${page.objectName}`;
-        const totalPages = page.totalPages || 0;
-        const pagesToRequest = totalPages > 2 ? [1, totalPages] : undefined;
-        if (pagesToRequest) {
-          console.log(`PDF has ${totalPages} pages; OCR will process only pages ${pagesToRequest.join(', ')}`);
-        }
-        const [result] = await getVisionClient().batchAnnotateFiles({
-          requests: [
-            {
-              inputConfig: {
-                gcsSource: { uri: gcsUri },
-                mimeType: 'application/pdf',
-              },
-              features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-              ...(pagesToRequest && { pages: pagesToRequest }),
-            },
-          ],
-        });
-        const pdfResponses = result.responses?.[0]?.responses || [];
-        for (let i = 0; i < pdfResponses.length; i++) {
-          const pageText = pdfResponses[i]?.fullTextAnnotation?.text?.trim();
-          const pageNum = pagesToRequest ? pagesToRequest[i] : i + 1;
-          if (pageText) {
-            aggregatedText.push(`=== PAGE ${pageNum} ===\n${pageText}`);
-          } else {
-            console.warn(`Vision returned empty text for PDF page ${pageNum}`);
-          }
-        }
-      } catch (visionError) {
-        console.error('Vision API batchAnnotateFiles failed for PDF', visionError);
-        throw visionError;
+    const mimeType = page.contentType || page.mimeType || 'application/pdf';
+    const gcsUri = `gs://${page.bucketName}/${page.objectName}`;
+    
+    parts.push({
+      fileData: {
+        mimeType: mimeType,
+        fileUri: gcsUri,
       }
-      continue;
-    }
-
-    try {
-      const [visionResult] = await getVisionClient().documentTextDetection({
-        image: { content: page.buffer },
-      });
-      const pageText = visionResult?.fullTextAnnotation?.text?.trim();
-      if (pageText) {
-        aggregatedText.push(`=== PAGE ${page.pageNumber} ===\n${pageText}`);
-      } else {
-        console.warn(`Vision returned empty text for page ${page.pageNumber}`);
-      }
-    } catch (visionError) {
-      console.error('Vision API failed to read invoice text', { mimeType }, visionError);
-      throw visionError;
-    }
+    });
   }
-
-  const ocrText = aggregatedText.join('\n\n');
-  if (!ocrText) {
-    throw new Error('Vision API did not return any text for this invoice.');
-  }
-
-  // Normalize European decimals (2.383,13 → 2383.13) before GPT
-  const fullText = normalizeEuropeanDecimals(ocrText);
 
   const systemPrompt = [
     'You are an expert accountant and document-analysis specialist for invoices and retail receipts (primarily Greek, occasionally foreign).',
     'You ALWAYS output strictly valid JSON following the schema provided by the user.',
     '',
-    'You will be given the FULL OCR text of an invoice or retail receipt (possibly multi-page).',
-    'The OCR may be noisy, misordered, or contain junk text from headers, footers, or page numbers.',
-    'The OCR you receive contains multiple pages in the format',
-    '=== PAGE 1 ===',
-    '... page 1 text ...',
-    '=== PAGE 2 ===',
-    '... page 2 text ...',
-    '=== PAGE N ===',
-    '... page N text ...',
+    'You will be given the images or PDF of an invoice or retail receipt (possibly multi-page).',
     '',
     '===========================',
     'STEP 0: INVOICE ORIGIN DETECTION',
@@ -320,7 +243,7 @@ async function runInvoiceOcrAttempt(pageBuffers) {
     '     It may appear with an "EL" or "GR" country prefix (e.g., EL133778466). ALWAYS strip the prefix and return exactly 9 digits.',
     '   - It appears near/below the supplier company name, often with ΔΟΥ nearby.',
     '   - CRITICAL EXCLUSION RULE:',
-    '     * Scan the OCR text for keywords: "ΣΤΟΙΧΕΙΑ ΠΕΛΑΤΗ", "ΣΤΟΙΧΕΙΑ ΑΠΟΣΤΟΛΗΣ", "ΕΠΩΝΥΜΙΑ ΠΕΛΑΤΗ", "ΠΕΛΑΤΗΣ".',
+    '     * Scan the document for keywords: "ΣΤΟΙΧΕΙΑ ΠΕΛΑΤΗ", "ΣΤΟΙΧΕΙΑ ΑΠΟΣΤΟΛΗΣ", "ΕΠΩΝΥΜΙΑ ΠΕΛΑΤΗ", "ΠΕΛΑΤΗΣ".',
     '     * Any ΑΦΜ appearing AFTER these keywords is the CUSTOMER ΑΦΜ - do NOT use it.',
     '     * Only use an ΑΦΜ that appears BEFORE any customer section.',
     '   - If there more than 1 ΑΦΜ or Α.Φ.Μ. values, the FIRST one (reading top-to-bottom) is almost always the supplier.',
@@ -451,7 +374,6 @@ async function runInvoiceOcrAttempt(pageBuffers) {
   ].join('\n');
 
   const extractionPrompt =
-    'Παρακάτω σου δίνω ΟΛΟ το κείμενο ενός τιμολογίου ή απόδειξης λιανικής (πιθανόν πολυσέλιδου) όπως προέκυψε από OCR.\n\n' +
     'Εντόπισε και επέστρεψε τα παρακάτω πεδία αυστηρά σε JSON, σύμφωνα με το schema:\n\n' +
     REQUIRED_FIELDS.map((field, idx) => `${idx + 1}. ${field}`).join('\n') +
     '\n\n⚠️ ΚΡΙΣΙΜΟΙ ΚΑΝΟΝΕΣ:\n' +
@@ -468,50 +390,23 @@ async function runInvoiceOcrAttempt(pageBuffers) {
     '- Αν είναι ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ: το "ΣΥΝΟΛΟ" (με χρηματικό ποσό) είναι το ΠΛΗΡΩΤΕΟ. Αγνόησε "ΣΥΝΟΛΟ ΓΡΑΜΜΩΝ" (αριθμός ειδών). Υπολόγισε ΚΑΘΑΡΗ ΑΞΙΑ και ΦΠΑ αν δεν εμφανίζονται ρητά.\n' +
     '- Τα οικονομικά σύνολα βρίσκονται μόνο στην τελευταία σελίδα.\n' +
     '- Αν κάποιο πεδίο δεν είναι βέβαιο, βάλε null.\n' +
-    '- Χρησιμοποίησε δεκαδικό με τελεία.\n\n' +
-    'Ακολουθεί το κείμενο του τιμολογίου:\n\n' +
-    fullText;
+    '- Χρησιμοποίησε δεκαδικό με τελεία.\n\n';
 
-  const response = await client.responses.create({
-    model: 'gpt-4o-mini',
-    input: [
-      {
-        role: 'system',
-        content: [{ type: 'input_text', text: systemPrompt }],
-      },
+  parts.unshift({ text: systemPrompt + '\n\n' + extractionPrompt });
+
+  const request = {
+    contents: [
       {
         role: 'user',
-        content: [{ type: 'input_text', text: extractionPrompt }],
-      },
+        parts: parts,
+      }
     ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'invoice_ocr_format',
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            ΗΜΕΡΟΜΗΝΙΑ: { type: ['string', 'null'] },
-            'ΑΡΙΘΜΟΣ ΤΙΜΟΛΟΓΙΟΥ': { type: ['string', 'null'] },
-            'ΑΦΜ ΠΡΟΜΗΘΕΥΤΗ': { type: ['string', 'null'] },
-            ΠΡΟΜΗΘΕΥΤΗΣ: { type: ['string', 'null'] },
-            'ΚΑΘΑΡΗ ΑΞΙΑ': { type: ['string', 'null'] },
-            ΦΠΑ: { type: ['string', 'null'] },
-            ΠΛΗΡΩΤΕΟ: { type: ['string', 'null'] },
-            ΤΥΠΟΣ_ΠΑΡΑΣΤΑΤΙΚΟΥ: { type: 'string', enum: ['ΧΡΕΩΣΤΙΚΟ', 'ΠΙΣΤΩΤΙΚΟ'] },
-            ΑΚΡΙΒΕΙΑ: { type: ['string', 'null'] },
-          },
-          required: REQUIRED_FIELDS,
-        },
-        strict: true,
-      },
-    },
-    max_output_tokens: 800,
-  });
+  };
 
-  const rawText = collectResponseText(response);
-  return parseJsonFromResponse(rawText);
+  const responseStream = await generativeModel.generateContent(request);
+  const jsonResponse = responseStream.response.candidates[0].content.parts[0].text;
+  
+  return parseJsonFromResponse(jsonResponse);
 }
 
 export {
@@ -521,11 +416,8 @@ export {
   METADATA_SUCCESS_MESSAGE,
   formatMetadataError,
   formatMetadataSuccess,
-  getOpenAIClient,
   OCR_MAX_RETRIES,
-  collectResponseText,
   parseJsonFromResponse,
-  normalizeEuropeanDecimals,
   parseAmount,
   parseDate,
   runInvoiceOcr,
