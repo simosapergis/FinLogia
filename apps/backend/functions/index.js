@@ -948,7 +948,7 @@ export const addFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'businessId is required');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
+  if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1024,10 +1024,6 @@ export const editFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
   if (!businessId) {
     return sendError(res, 400, 'businessId is required');
-  }
-
-  if (user.isAccountant) {
-    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
   }
 
   if (user.businessId !== businessId) {
@@ -1138,10 +1134,6 @@ export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => 
     return sendError(res, 400, 'entryId is required and must be a string');
   }
 
-  if (user.isAccountant) {
-    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
-  }
-
   if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
@@ -1204,10 +1196,6 @@ export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
   if (!businessId) {
     return sendError(res, 400, 'businessId is required');
-  }
-
-  if (authResult.user.isAccountant) {
-    return sendError(res, 403, 'Accountants are not allowed to manage financial entries');
   }
 
   if (authResult.user.businessId !== businessId) {
@@ -1332,7 +1320,7 @@ export const addRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 400, 'businessId is required');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
+  if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1406,7 +1394,7 @@ export const updateRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) =
     return sendError(res, 400, 'recurringId is required');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
+  if (user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
@@ -1568,7 +1556,7 @@ export const getRecurringExpenses_v2 = onRequest(HTTP_OPTS, async (req, res) => 
     return sendError(res, 400, 'businessId is required');
   }
 
-  if (authResult.user.businessId !== businessId && !authResult.user.isAccountant) {
+  if (authResult.user.businessId !== businessId) {
     return sendError(res, 403, 'Unauthorized access to this business');
   }
 
