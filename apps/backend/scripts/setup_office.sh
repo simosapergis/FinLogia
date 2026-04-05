@@ -375,6 +375,7 @@ else
         "roles/iam.serviceAccountUser"
         "roles/storage.admin"
         "roles/serviceusage.serviceUsageConsumer"
+        "roles/aiplatform.user"
     )
 
     for ROLE in "${ROLES[@]}"; do
@@ -409,19 +410,19 @@ else
         --condition=None \
         >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Vertex AI user role.${NC}"
 
-            echo -e "  -> Firebase Admin SDK SA: roles/serviceusage.serviceUsageConsumer ..."
-            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-                --member="serviceAccount:firebase-adminsdk-fbsvc@${PROJECT_ID}.iam.gserviceaccount.com" \
-                --role="roles/serviceusage.serviceUsageConsumer" \
-                --condition=None \
-                >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Service Usage Consumer role to Firebase Admin SDK SA.${NC}"
-
     echo -e "  -> Eventarc SA: roles/eventarc.serviceAgent ..."
     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
         --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-eventarc.iam.gserviceaccount.com" \
         --role="roles/eventarc.serviceAgent" \
         --condition=None \
         >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Eventarc service agent role.${NC}"
+
+    echo -e "  -> Vertex AI Service Agent: roles/storage.objectViewer ..."
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+        --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+        --role="roles/storage.objectViewer" \
+        --condition=None \
+        >> "$LOG_FILE" 2>&1 || echo -e "  ${YELLOW}-> Warning: Failed to assign Storage Object Viewer to Vertex AI Service Agent.${NC}"
 
     echo -e "  -> Cloud Functions SA: roles/run.invoker ..."
     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
