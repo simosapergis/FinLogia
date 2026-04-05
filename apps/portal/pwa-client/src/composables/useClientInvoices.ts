@@ -77,7 +77,7 @@ export function useClientInvoices() {
     selectedIds.value = new Set();
   }
 
-  async function loadInvoices(clientProjectId: string, startDate: string, endDate: string) {
+  async function loadInvoices(clientProjectId: string, startDate: string, endDate: string, dateType: 'invoiceDate' | 'uploadedAt' = 'invoiceDate') {
     loading.value = true;
     error.value = '';
     selectedIds.value = new Set();
@@ -89,9 +89,9 @@ export function useClientInvoices() {
 
       const q = query(
         collection(db, `businesses/${clientProjectId}/invoices`),
-        where('invoiceDate', '>=', Timestamp.fromDate(start)),
-        where('invoiceDate', '<=', Timestamp.fromDate(end)),
-        orderBy('invoiceDate', 'desc')
+        where(dateType, '>=', Timestamp.fromDate(start)),
+        where(dateType, '<=', Timestamp.fromDate(end)),
+        orderBy(dateType, 'desc')
       );
 
       const snapshot = await getDocs(q);
@@ -103,6 +103,7 @@ export function useClientInvoices() {
           supplierName: data.supplierName || 'Άγνωστος',
           invoiceNumber: data.invoiceNumber,
           invoiceDate: data.invoiceDate?.toDate?.()?.toISOString() || data.invoiceDate,
+          uploadedAt: data.uploadedAt?.toDate?.()?.toISOString() || data.uploadedAt,
           totalAmount: data.totalAmount,
           isCredit: data.isCredit || false,
           auditStatus: data.auditStatus || null,

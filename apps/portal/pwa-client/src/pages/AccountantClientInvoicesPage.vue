@@ -98,14 +98,27 @@
               </div>
             </div>
           </div>
+
+          <!-- Date Type Selector -->
+          <div class="mt-6 mb-2">
+            <label class="mb-2 block text-sm font-medium text-slate-700">Ημερομηνία</label>
+            <select
+              v-model="dateType"
+              class="h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-3 text-sm text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/20 sm:h-14 sm:px-4 sm:text-base"
+              @change="syncQueryParams"
+            >
+              <option value="invoiceDate">Εκδοσης</option>
+              <option value="uploadedAt">Μεταφόρτωσης</option>
+            </select>
+          </div>
         </div>
       </Transition>
 
       <Transition name="fade">
         <div v-if="isCollapsed && hasSearched" class="flex items-center justify-between px-6 pt-4">
           <div class="flex items-center gap-2 text-sm text-slate-600">
-            <Calendar class="h-4 w-4" />
-            <span>{{ formatDisplayDate(startDate) }} - {{ formatDisplayDate(endDate) }}</span>
+            <Calendar class="h-4 w-4 shrink-0" />
+            <span>{{ dateTypeLabel }} · {{ formatDisplayDate(startDate) }} - {{ formatDisplayDate(endDate) }}</span>
           </div>
           <button
             type="button"
@@ -244,8 +257,8 @@
 
                   <!-- Other Badges -->
                   <div class="absolute left-1/2 flex w-[120%] -translate-x-1/2 flex-wrap justify-center gap-1" :class="invoice.auditStatus ? '-bottom-6' : '-bottom-2.5'">
-                    <StatusBadge v-if="isViewed(invoice) && !invoice.auditStatus" type="viewed" />
-                    <StatusBadge v-if="isExported(invoice)" type="exported" />
+                    <StatusBadge v-if="isViewed(invoice) && !invoice.auditStatus" status="viewed" />
+                    <StatusBadge v-if="isExported(invoice)" status="exported" />
                   </div>
                 </button>
               </div>
@@ -352,6 +365,14 @@ const hasSearched = ref(false);
 const isCollapsed = ref(false);
 const exporting = ref(false);
 
+type DateType = 'invoiceDate' | 'uploadedAt';
+const dateType = ref<DateType>('invoiceDate');
+const dateTypeForResults = ref<DateType>('invoiceDate');
+
+const dateTypeLabel = computed(() =>
+  dateTypeForResults.value === 'invoiceDate' ? 'Εκδοσης' : 'Μεταφόρτωσης'
+);
+
 const modalVisible = ref(false);
 const modalSupplierId = ref('');
 const modalInvoiceId = ref('');
@@ -421,6 +442,7 @@ function syncQueryParams() {
     query.from = startDate.value;
     query.to = endDate.value;
   }
+  query.dateType = dateType.value;
   router.replace({ query });
 }
 
@@ -428,7 +450,8 @@ async function searchInvoices() {
   if (!isValidRange.value) return;
   hasSearched.value = true;
   isCollapsed.value = true;
-  await loadInvoices(props.projectId, startDate.value, endDate.value);
+  await loadInvoices(props.projectId, startDate.value, endDate.value, dateType.value);
+  dateTypeForResults.value = dateType.value;
 }
 
 function toggleSelectAll() {
@@ -506,6 +529,11 @@ onMounted(async () => {
   const periodParam = route.query.period as string | undefined;
   const fromParam = route.query.from as string | undefined;
   const toParam = route.query.to as string | undefined;
+  const dateTypeParam = route.query.dateType as string | undefined;
+
+  if (dateTypeParam === 'invoiceDate' || dateTypeParam === 'uploadedAt') {
+    dateType.value = dateTypeParam;
+  }
 
   if (periodParam) {
     const period = quickPeriods.find(p => p.label === periodParam);

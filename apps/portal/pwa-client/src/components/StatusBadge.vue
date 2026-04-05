@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-type Status = 'pending' | 'processing' | 'uploaded' | 'completed' | 'failed' | 'paid' | 'unpaid' | 'partially_paid';
+type Status = 'pending' | 'processing' | 'uploaded' | 'completed' | 'failed' | 'paid' | 'unpaid' | 'partially_paid' | 'viewed' | 'exported';
 
 const props = defineProps<{ 
   status: Status;
@@ -21,6 +21,8 @@ const labelMap: Record<Status, string> = {
   paid: 'Εξοφλημένο',
   unpaid: 'Ανεξόφλητο',
   partially_paid: 'Μερικώς εξοφλημένο',
+  viewed: 'Προβλήθηκε',
+  exported: 'Εξήχθη',
 };
 
 const colors: Record<Status, string> = {
@@ -32,6 +34,8 @@ const colors: Record<Status, string> = {
   paid: 'bg-emerald-100 text-emerald-700',
   unpaid: 'bg-rose-100 text-rose-700',
   partially_paid: 'bg-amber-100 text-amber-700',
+  viewed: 'bg-blue-100 text-blue-700',
+  exported: 'bg-fuchsia-100 text-fuchsia-700',
 };
 
 const badgeClasses = computed(() => {
