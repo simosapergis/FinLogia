@@ -143,6 +143,20 @@
         </ol>
       </div>
 
+      <div v-if="inboundEmailAddress" class="rounded-3xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
+        <p class="font-semibold text-slate-700">Αποστολή μέσω Email</p>
+        <p class="mt-2">Προωθήστε τα τιμολόγιά σας (σε μορφή PDF) στην παρακάτω διεύθυνση για αυτόματη καταχώρηση:</p>
+        <div class="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-3 border border-slate-100">
+          <span class="truncate pr-2 font-mono text-xs text-slate-600">{{ inboundEmailAddress }}</span>
+          <button 
+            @click="copyEmailAddress" 
+            class="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-primary-600 shadow-sm border border-slate-200 hover:bg-slate-50"
+          >
+            Αντιγραφή
+          </button>
+        </div>
+      </div>
+
       <div class="rounded-3xl bg-white p-4 shadow-sm">
         <p class="font-semibold text-slate-700">Πρόσφατες μεταφορτώσεις</p>
         <p v-if="!uploadsLog.length" class="text-sm text-slate-500">Δεν υπάρχουν μεταφορτώσεις ακόμα.</p>
@@ -168,11 +182,16 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useUserStore } from '@/store/userStore';
 
 import CameraButton from '@/components/CameraButton.vue';
 import Loader from '@/components/Loader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { useInvoiceUpload } from '@/composables/useInvoiceUpload';
+import { useNotifications } from '@/composables/useNotifications';
+
+const { notifySuccess, notifyError } = useNotifications();
 
 const {
   addPage,
@@ -193,6 +212,25 @@ const {
   overallProgress,
   hasPendingUploads,
 } = useInvoiceUpload();
+
+const userStore = useUserStore();
+const { currentBusinessId } = storeToRefs(userStore);
+
+const inboundEmailAddress = computed(() => {
+  if (!currentBusinessId.value) return '';
+  return `upload-${currentBusinessId.value}@${import.meta.env.VITE_INBOUND_EMAIL_DOMAIN}`;
+});
+
+const copyEmailAddress = async () => {
+  if (inboundEmailAddress.value) {
+    try {
+      await navigator.clipboard.writeText(inboundEmailAddress.value);
+      notifySuccess('Η διεύθυνση email αντιγράφηκε!');
+    } catch (err) {
+      notifyError('Αποτυχία αντιγραφής της διεύθυνσης email.');
+    }
+  }
+};
 
 const galleryInput = ref<HTMLInputElement | null>(null);
 const useGalleryMode = ref(false);

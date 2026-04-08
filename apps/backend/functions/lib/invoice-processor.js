@@ -21,6 +21,7 @@ import {
 import { buildCombinedPdfFromPages } from './invoice-pdf.js';
 import { ensureSupplierProfile } from './suppliers.js';
 import { FINANCIAL_ENTRIES_COLLECTION, ENTRY_TYPE, ENTRY_SOURCE, EXPENSE_CATEGORY } from './financial.js';
+import { sendOcrSuccessEmail, sendOcrErrorEmail } from './email-utils.js';
 
 /**
  * Core handler for processInvoiceDocument_v2.
@@ -143,8 +144,8 @@ async function processInvoiceDocumentHandler(event) {
     const supplierId = sanitizeId(supplierTaxNumber, sanitizeId(ocrSupplierName, 'unknown-supplier'));
     const missingTaxNumber = !mappedResult.supplierTaxNumber;
     invoiceNumber = mappedResult.invoiceNumber?.toString().match(/\d+/g)?.join('') || null;
-    const uploadedBy = invoiceData.ownerUid || null;
-    const uploadedByName = invoiceData.ownerName || null;
+    const uploadedBy = invoiceData.ownerUid ?? null;
+    const uploadedByName = invoiceData.ownerName ?? null;
     const { canonicalName } = await ensureSupplierProfile({
       businessId,
       supplierId,
@@ -184,6 +185,10 @@ async function processInvoiceDocumentHandler(event) {
           detectedSupplierId: supplierId,
           updatedAt: serverTimestamp(),
         });
+
+        if (invoiceData.senderEmail) {
+          await sendOcrErrorEmail(invoiceData.senderEmail, errorMessage);
+        }
 
         return;
       }
@@ -329,7 +334,9 @@ async function processInvoiceDocumentHandler(event) {
 
     console.log(`Stored invoice data at ${invoiceDocRef.path}`);
 
-    // TODO: send notification on success
+    if (invoiceData.senderEmail) {
+      await sendOcrSuccessEmail(invoiceData.senderEmail, invoiceNumber, supplierName);
+    }
   } catch (error) {
     const baseError = `Αδυναμία επεξεργασίας τιμολογίου με id: ${invoiceId}. Σφάλμα: ${error.message}`;
     const errorMessage = formatMetadataError(invoiceNumber, supplierName, baseError);
@@ -340,7 +347,9 @@ async function processInvoiceDocumentHandler(event) {
       updatedAt: serverTimestamp(),
     });
 
-    // TODO: send notification on error
+    if (invoiceData.senderEmail) {
+      await sendOcrErrorEmail(invoiceData.senderEmail, errorMessage);
+    }
   }
 }
 

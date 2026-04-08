@@ -93,8 +93,8 @@ async function ensureInvoiceDocument({ businessId, invoiceId, uid, userName, buc
     const updates = {
       totalPages: existing.totalPages || normalizedTotalPages || null,
       bucket: existing.bucket || bucketName,
-      ownerUid: existing.ownerUid || uid,
-      ownerName: existing.ownerName || userName || null,
+      ownerUid: existing.ownerUid ?? uid ?? null,
+      ownerName: existing.ownerName ?? userName ?? null,
       updatedAt: serverTimestamp(),
     };
 
@@ -168,7 +168,7 @@ async function registerUploadedPage({ businessId, invoiceId, pageNumber, objectN
       uploadedCount: uploadedPages.size,
       pages,
       bucket: bucketName || data.bucket,
-      ownerUid: data.ownerUid || uid,
+      ownerUid: data.ownerUid ?? uid ?? null,
       status: shouldMarkReady ? INVOICE_STATUS.ready : data.status,
       readyAt: shouldMarkReady ? serverTimestamp() : data.readyAt || null,
       updatedAt: serverTimestamp(),

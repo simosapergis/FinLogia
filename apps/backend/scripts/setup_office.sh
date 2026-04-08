@@ -501,6 +501,8 @@ else
 SERVICE_ACCOUNT_EMAIL=${SA_EMAIL}
 REGION=europe-west3
 GCS_BUCKET=${PROJECT_ID}.appspot.com
+SENDGRID_API_KEY=
+SENDGRID_FROM_EMAIL=noreply@finlogia.online
 EOF
     echo -e "  -> Created functions/.env.${PROJECT_ID}"
     mark_step_done "env_config"
@@ -777,6 +779,10 @@ echo -e "\n${YELLOW}NEXT STEPS:${NC}"
 echo -e "1. To deploy the frontend client, navigate to your frontend repository and run:"
 echo -e "   ${CYAN}firebase use ${PROJECT_ID} && firebase deploy --only hosting${NC}"
 echo -e "2. To sign in and get an ID token, run: ${CYAN}npm run auth:login${NC}"
+echo -e "\n${YELLOW}IMPORTANT: To enable Email-to-Invoice for this office:${NC}"
+echo -e "1. Create a DNS MX record for ${CYAN}${PROJECT_ID}.invoices.finlogia.online${NC} pointing to mx.sendgrid.net"
+echo -e "2. Add an Inbound Parse Webhook in SendGrid for ${CYAN}${PROJECT_ID}.invoices.finlogia.online${NC} pointing to the handleInboundEmail Cloud Function URL."
+echo -e "3. Fill in ${CYAN}SENDGRID_API_KEY${NC} in ${CYAN}functions/.env.${PROJECT_ID}${NC} and redeploy functions."
 echo -e "\n${CYAN}Output files:${NC}"
 echo -e "  Backend env:    ${CYAN}functions/.env.${PROJECT_ID}${NC}"
 echo -e "  Frontend config: ${CYAN}firebase-config.${PROJECT_ID}.json${NC}"
