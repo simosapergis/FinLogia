@@ -2,6 +2,12 @@
 set -e
 
 # Logging setup
+if [ ! -f "firebase.json" ] || [ ! -d "functions" ]; then
+    echo -e "\033[0;31m❌ Error: This script must be run from the apps/backend directory.\033[0m"
+    echo -e "Please run: cd apps/backend && ./scripts/setup_office.sh"
+    exit 1
+fi
+
 LOG_FILE="setup_client.log"
 > "$LOG_FILE"
 
