@@ -239,9 +239,10 @@ else
         cloudscheduler.googleapis.com \
         --project "$PROJECT_ID" >> "$LOG_FILE" 2>&1
 
-    echo -e "  -> Provisioning service identities for Gen 2 Cloud Functions..."
+    echo -e "  -> Provisioning service identities for Gen 2 Cloud Functions and Vertex AI..."
     gcloud beta services identity create --service=pubsub.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
     gcloud beta services identity create --service=eventarc.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
+    gcloud beta services identity create --service=aiplatform.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
     gcloud storage service-agent --project="$PROJECT_ID" >> "$LOG_FILE" 2>&1
 
     mark_step_done "enable_apis"
