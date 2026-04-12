@@ -1,7 +1,7 @@
 {
-  "name": "invoice_scanner",
-  "version": "1.0.0",
-  "description": "CLI tool that uses GPT-4o to extract Greek invoice fields via OCR.",
+  "name": "finlogia-backend",
+  "version": "1.0.1",
+  "description": "Firebase backend for FinLogia, including Cloud Functions, Firestore rules, and Storage rules.",
   "type": "module",
   "scripts": {
     "setup:office": "bash scripts/setup_office.sh",

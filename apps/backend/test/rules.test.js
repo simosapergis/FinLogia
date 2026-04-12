@@ -93,6 +93,11 @@ describe('Firestore Security Rules', () => {
 
 describe('Storage Security Rules', () => {
   it('should deny unauthenticated access', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const storage = context.storage();
+      await storage.ref('businesses/business_A/invoices/file.pdf').putString('fake-content');
+    });
+
     const unauthedStorage = testEnv.unauthenticatedContext().storage();
     const fileRef = unauthedStorage.ref('businesses/business_A/invoices/file.pdf');
     await assertFails(fileRef.getDownloadURL());
@@ -103,6 +108,9 @@ describe('Storage Security Rules', () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
       await db.collection('users').doc('user_A').set({ businessId: 'business_A' });
+      
+      const storage = context.storage();
+      await storage.ref('businesses/business_B/invoices/file.pdf').putString('fake-content');
     });
 
     const authedStorage = testEnv.authenticatedContext('user_A').storage();
@@ -113,6 +121,13 @@ describe('Storage Security Rules', () => {
   });
 
   it('should allow accountant to read PDFs but not other files', async () => {
+    // Setup test data: upload the files first!
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const storage = context.storage();
+      await storage.ref('businesses/business_A/invoices/invoice.pdf').putString('fake-pdf-content');
+      await storage.ref('businesses/business_A/invoices/invoice.jpg').putString('fake-jpg-content');
+    });
+
     const accountantStorage = testEnv.authenticatedContext('accountant_X', { isAccountant: true }).storage();
     
     // Accountant can read PDF
