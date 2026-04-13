@@ -17,10 +17,12 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     
     // Assert that the user is NOT on the accountant page
     // They should be redirected to login (if not authed) or dashboard (if authed as business)
-    expect(page.url()).not.toContain('/accountant/clients');
+    expect(page.url()).not.toBe('http://localhost:5173/accountant/clients');
+    // It will likely redirect to /login?redirect=/accountant/clients, which is expected
+    expect(page.url()).toContain('/login');
   });
 
-  test('Accountant should be able to access accountant routes', async ({ page }) => {
+  test.skip('Accountant should be able to access accountant routes', async ({ page }) => {
     // In a real E2E test, you would perform a login action here with an accountant account
     // await page.goto('/login');
     // await page.fill('input[type="email"]', 'accountant@test.com');
@@ -28,10 +30,9 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     // await page.click('button[type="submit"]');
     
     // For this scaffold, we just define the structure
-    test.skip('Requires mocked auth or staging environment', () => {});
   });
 
-  test('Accountant context switching should isolate state', async ({ page }) => {
+  test.skip('Accountant context switching should isolate state', async ({ page }) => {
     // 1. Log in as accountant
     // 2. Navigate to /accountant/clients
     // 3. Click on Client A -> URL becomes /accountant/clients/clientA/invoices
@@ -39,7 +40,5 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     // 5. Go back to /accountant/clients
     // 6. Click on Client B -> URL becomes /accountant/clients/clientB/invoices
     // 7. Verify Client B's name is on the page and Client A's data is NOT visible
-    
-    test.skip('Requires mocked auth and seeded database', () => {});
   });
 });
