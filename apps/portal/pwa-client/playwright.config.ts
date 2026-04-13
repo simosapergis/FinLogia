@@ -21,5 +21,13 @@ export default defineConfig({
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
+    env: {
+      VITE_FIREBASE_API_KEY: 'dummy-api-key',
+      VITE_FIREBASE_AUTH_DOMAIN: 'dummy-auth-domain',
+      VITE_FIREBASE_PROJECT_ID: 'dummy-project-id',
+      VITE_FIREBASE_STORAGE_BUCKET: 'dummy-storage-bucket',
+      VITE_FIREBASE_MESSAGING_SENDER_ID: 'dummy-sender-id',
+      VITE_FIREBASE_APP_ID: 'dummy-app-id',
+    },
   },
 });
