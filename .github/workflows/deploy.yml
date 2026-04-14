@@ -47,6 +47,10 @@ jobs:
   release:
     needs: pre-deploy-tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push tags and commit changelog/package.json
+      issues: write # Required to comment on released issues
+      pull-requests: write # Required to comment on released PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
