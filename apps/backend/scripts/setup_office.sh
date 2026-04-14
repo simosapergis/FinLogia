@@ -237,6 +237,7 @@ else
         identitytoolkit.googleapis.com \
         pubsub.googleapis.com \
         cloudscheduler.googleapis.com \
+        firebaserules.googleapis.com \
         --project "$PROJECT_ID" >> "$LOG_FILE" 2>&1
 
     echo -e "  -> Provisioning service identities for Gen 2 Cloud Functions and Vertex AI..."
@@ -285,6 +286,11 @@ else
     fi
 
     echo -e "  -> Provisioning Firebase Storage default bucket..."
+    
+    # 1. Add Firebase Storage to the project
+    firebase storage:add --project "$PROJECT_ID" >> "$LOG_FILE" 2>&1 || true
+
+    # 2. Call the v1alpha API as a fallback
     FB_BUCKET_RESPONSE=$(curl -s -X POST \
         "https://firebasestorage.googleapis.com/v1alpha/projects/${PROJECT_ID}/defaultBucket" \
         -H "Authorization: Bearer $(gcloud auth print-access-token)" \
@@ -711,11 +717,35 @@ else
         process.stdin.on('end', () => {
             const raw = JSON.parse(chunks.join(''));
             const cfg = raw.result.sdkConfig;
-            console.log(JSON.stringify(cfg, null, 2));
+            
+            // Format for clients.json
+            const clientConfig = {
+              projectId: cfg.projectId,
+              appId: cfg.appId,
+              storageBucket: cfg.storageBucket,
+              apiKey: cfg.apiKey,
+              authDomain: cfg.authDomain,
+              messagingSenderId: cfg.messagingSenderId,
+              projectNumber: cfg.messagingSenderId, // Usually same as messagingSenderId
+              version: \"2\"
+            };
+            
+            console.log(JSON.stringify(clientConfig, null, 2));
         });
     " > "$CONFIG_FILE"
 
     echo -e "  -> Saved to ${CYAN}${CONFIG_FILE}${NC}"
+    
+    echo -e "  -> Updating apps/portal/clients.json..."
+    CLIENTS_JSON="../portal/clients.json"
+    if [ -f "$CLIENTS_JSON" ]; then
+        # Use jq to append the new config to the existing array
+        jq ". += [$(cat "$CONFIG_FILE")]" "$CLIENTS_JSON" > "${CLIENTS_JSON}.tmp" && mv "${CLIENTS_JSON}.tmp" "$CLIENTS_JSON"
+        echo -e "  -> Successfully added ${PROJECT_ID} to clients.json"
+    else
+        echo -e "  ${YELLOW}-> Warning: apps/portal/clients.json not found. Could not auto-update.${NC}"
+    fi
+
     echo -e "\n  ${CYAN}Firebase SDK config for frontend:${NC}"
     cat "$CONFIG_FILE"
     echo ""

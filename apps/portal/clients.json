@@ -1,0 +1,42 @@
+[
+  {
+    "projectId": "finlogia-demo",
+    "appId": "1:95721742686:web:18b37854400b560ade6fcf",
+    "storageBucket": "finlogia-demo.firebasestorage.app",
+    "apiKey": "AIzaSyDys1p-rAzKXMgqnpDQwsxfZ3HxAhLVktk",
+    "authDomain": "finlogia-demo.firebaseapp.com",
+    "messagingSenderId": "95721742686",
+    "projectNumber": "95721742686",
+    "version": "2"
+  },
+  {
+    "projectId": "finlogia-xerimexeri",
+    "appId": "1:34568968249:web:c6ba0168d49d52ab2495e8",
+    "storageBucket": "finlogia-xerimexeri.firebasestorage.app",
+    "apiKey": "AIzaSyAh17OOXIaqDNCAM3eRFxoJYALX4dTHVk0",
+    "authDomain": "finlogia-xerimexeri.firebaseapp.com",
+    "messagingSenderId": "34568968249",
+    "projectNumber": "34568968249",
+    "version": "2"
+  },
+  {
+    "projectId": "finlogia-mdellatolas",
+    "appId": "1:415761583492:web:780bce9287103e2a52a1d1",
+    "storageBucket": "finlogia-mdellatolas.firebasestorage.app",
+    "apiKey": "AIzaSyDoW15Ir_B8rhP_6lfXUVI8_586KIBHWUg",
+    "authDomain": "finlogia-mdellatolas.firebaseapp.com",
+    "messagingSenderId": "415761583492",
+    "projectNumber": "415761583492",
+    "version": "2"
+  },
+  {
+    "projectId": "finlogia-antonis-priligos",
+    "appId": "1:610389223621:web:587aa11109eabebdaae8ac",
+    "storageBucket": "finlogia-antonis-priligos.firebasestorage.app",
+    "apiKey": "AIzaSyABmqqvVYePW7nIcVFYY6dHgNJoOAvH_MQ",
+    "authDomain": "finlogia-antonis-priligos.firebaseapp.com",
+    "messagingSenderId": "610389223621",
+    "projectNumber": "610389223621",
+    "version": "2"
+  }
+]

@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(),
+}));
+
+vi.mock('firebase/firestore', () => ({
+  getFirestore: vi.fn(),
+  doc: vi.fn(),
+  getDoc: vi.fn(),
+}));
+
 import AccountantInvoiceDetailModal from '../AccountantInvoiceDetailModal.vue';
 
 describe('AccountantInvoiceDetailModal.vue', () => {

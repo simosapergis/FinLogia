@@ -6,9 +6,6 @@ import { test, expect } from '@playwright/test';
 test.describe('Role-Based Access Control (RBAC)', () => {
   
   test('Business Owner should be redirected away from accountant routes', async ({ page }) => {
-    // Simulate a business owner login state (this would typically involve setting a cookie or localStorage)
-    // For this test, we assume the app redirects unauthenticated or unauthorized users to login or home
-    
     // Attempt to access accountant clients page
     await page.goto('/accountant/clients');
     
@@ -17,29 +14,65 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     
     // Assert that the user is NOT on the accountant page
     // They should be redirected to login (if not authed) or dashboard (if authed as business)
-    expect(page.url()).not.toContain('/accountant/clients');
+    await expect(page).toHaveURL(/.*\/login.*/);
   });
 
   test('Accountant should be able to access accountant routes', async ({ page }) => {
-    // In a real E2E test, you would perform a login action here with an accountant account
-    // await page.goto('/login');
-    // await page.fill('input[type="email"]', 'accountant@test.com');
-    // await page.fill('input[type="password"]', 'password123');
-    // await page.click('button[type="submit"]');
+    await page.goto('/login');
     
-    // For this scaffold, we just define the structure
-    test.skip('Requires mocked auth or staging environment', () => {});
+    // Fill in the accountant credentials seeded in global-setup
+    await page.fill('input[type="email"]', 'accountant@test.com');
+    await page.fill('input[type="password"]', 'password123');
+    await page.click('button[type="submit"]');
+    
+    // Wait for navigation to complete
+    await expect(page).toHaveURL(/.*\/accountant/);
+    
+    // Assert that the user is on the accountant dashboard
+    expect(page.url()).toContain('/accountant');
   });
 
   test('Accountant context switching should isolate state', async ({ page }) => {
     // 1. Log in as accountant
+    await page.goto('/login');
+    await page.fill('input[type="email"]', 'accountant@test.com');
+    await page.fill('input[type="password"]', 'password123');
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/.*\/accountant/);
+
     // 2. Navigate to /accountant/clients
+    await page.goto('/accountant/clients');
+    await expect(page).toHaveURL(/.*\/accountant\/clients/);
+
     // 3. Click on Client A -> URL becomes /accountant/clients/clientA/invoices
-    // 4. Verify Client A's name is on the page
+    // We can navigate directly or click a link. For robustness, navigate directly to the seeded client.
+    await page.goto('/accountant/clients/clientA/invoices');
+    await expect(page).toHaveURL(/.*\/accountant\/clients\/clientA\/invoices/);
+
+    // Select "Μήνας" (Month) and click search
+    await page.click('text=Μήνας');
+    await page.click('button:has-text("Αναζήτηση Τιμολογίων")');
+
+    // 4. Verify Client A's invoice is on the page
+    await expect(page.locator('text=INV-A-001')).toBeVisible();
+    await expect(page.locator('text=Supplier A')).toBeVisible();
+
     // 5. Go back to /accountant/clients
+    await page.goto('/accountant/clients');
+    await expect(page).toHaveURL(/.*\/accountant\/clients/);
+
     // 6. Click on Client B -> URL becomes /accountant/clients/clientB/invoices
-    // 7. Verify Client B's name is on the page and Client A's data is NOT visible
-    
-    test.skip('Requires mocked auth and seeded database', () => {});
+    await page.goto('/accountant/clients/clientB/invoices');
+    await expect(page).toHaveURL(/.*\/accountant\/clients\/clientB\/invoices/);
+
+    // Select "Μήνας" (Month) and click search
+    await page.click('text=Μήνας');
+    await page.click('button:has-text("Αναζήτηση Τιμολογίων")');
+
+    // 7. Verify Client B's invoice is on the page and Client A's data is NOT visible
+    await expect(page.locator('text=INV-B-001')).toBeVisible();
+    await expect(page.locator('text=Supplier B')).toBeVisible();
+    await expect(page.locator('text=INV-A-001')).not.toBeVisible();
+    await expect(page.locator('text=Supplier A')).not.toBeVisible();
   });
 });
