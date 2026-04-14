@@ -2,6 +2,12 @@
 set -e
 
 # Logging setup
+if [ ! -f "firebase.json" ] || [ ! -d "functions" ]; then
+    echo -e "\033[0;31m❌ Error: This script must be run from the apps/backend directory.\033[0m"
+    echo -e "Please run: cd apps/backend && ./scripts/setup_office.sh"
+    exit 1
+fi
+
 LOG_FILE="setup_client.log"
 > "$LOG_FILE"
 
@@ -234,9 +240,10 @@ else
         firebaserules.googleapis.com \
         --project "$PROJECT_ID" >> "$LOG_FILE" 2>&1
 
-    echo -e "  -> Provisioning service identities for Gen 2 Cloud Functions..."
+    echo -e "  -> Provisioning service identities for Gen 2 Cloud Functions and Vertex AI..."
     gcloud beta services identity create --service=pubsub.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
     gcloud beta services identity create --service=eventarc.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
+    gcloud beta services identity create --service=aiplatform.googleapis.com --project="$PROJECT_ID" --quiet >> "$LOG_FILE" 2>&1
     gcloud storage service-agent --project="$PROJECT_ID" >> "$LOG_FILE" 2>&1
 
     mark_step_done "enable_apis"
@@ -507,6 +514,8 @@ else
 SERVICE_ACCOUNT_EMAIL=${SA_EMAIL}
 REGION=europe-west3
 GCS_BUCKET=${PROJECT_ID}.appspot.com
+SENDGRID_API_KEY=
+SENDGRID_FROM_EMAIL=noreply@finlogia.online
 EOF
     echo -e "  -> Created functions/.env.${PROJECT_ID}"
     mark_step_done "env_config"
@@ -807,6 +816,10 @@ echo -e "\n${YELLOW}NEXT STEPS:${NC}"
 echo -e "1. To deploy the frontend client, navigate to your frontend repository and run:"
 echo -e "   ${CYAN}firebase use ${PROJECT_ID} && firebase deploy --only hosting${NC}"
 echo -e "2. To sign in and get an ID token, run: ${CYAN}npm run auth:login${NC}"
+echo -e "\n${YELLOW}IMPORTANT: To enable Email-to-Invoice for this office:${NC}"
+echo -e "1. Create a DNS MX record for ${CYAN}${PROJECT_ID}.invoices.finlogia.online${NC} pointing to mx.sendgrid.net"
+echo -e "2. Add an Inbound Parse Webhook in SendGrid for ${CYAN}${PROJECT_ID}.invoices.finlogia.online${NC} pointing to the handleInboundEmail Cloud Function URL."
+echo -e "3. Fill in ${CYAN}SENDGRID_API_KEY${NC} in ${CYAN}functions/.env.${PROJECT_ID}${NC} and redeploy functions."
 echo -e "\n${CYAN}Output files:${NC}"
 echo -e "  Backend env:    ${CYAN}functions/.env.${PROJECT_ID}${NC}"
 echo -e "  Frontend config: ${CYAN}firebase-config.${PROJECT_ID}.json${NC}"

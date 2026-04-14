@@ -31,9 +31,10 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Install Backend Dependencies
-        run: npm ci
-        working-directory: apps/backend
+      - name: Install Root Dependencies
+        run: |
+          rm -rf package-lock.json node_modules
+          npm install
 
       - name: Install Backend Functions Dependencies
         run: npm ci

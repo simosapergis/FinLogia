@@ -9,6 +9,3 @@
 * width of inputs in mobie ([c78367a](https://github.com/simosapergis/FinLogia/commit/c78367a92441f997049fa0ded0a58d1f1c777083))
 
 
-### Features
-
-* migrate to multi-tenant architecture and unified portal ([bb63da8](https://github.com/simosapergis/FinLogia/commit/bb63da82d7f9a5eda1858da282533c31cac2d4db))

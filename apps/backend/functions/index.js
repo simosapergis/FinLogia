@@ -191,6 +191,11 @@ export const processUploadedInvoice_v2 = onObjectFinalized(
       return;
     }
 
+    if (objectName.includes('/invoices/')) {
+      // Silently ignore final processed invoices to avoid unnecessary warnings
+      return;
+    }
+
     const parsed = parseUploadObjectName(objectName);
     if (!parsed) {
       console.warn(`Unable to parse invoice metadata from object name: ${objectName}`);
@@ -1925,4 +1930,6 @@ export const resetUserPassword_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     return sendError(res, 500, 'Αποτυχία επαναφοράς κωδικού', { details: error.message });
   }
 });
+
+export { handleInboundEmail } from './lib/inbound-email.js';
 
