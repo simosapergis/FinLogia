@@ -3,21 +3,16 @@ import { exportInvoices, ExportError } from '../exportInvoices';
 
 // Mock the apiClient module
 vi.mock('@/services/api/apiClient', () => ({
-  getAuthToken: vi.fn(),
+  apiRequest: vi.fn(),
   buildUrl: vi.fn((path: string) => `https://example.com${path}`),
 }));
 
-import { getAuthToken } from '@/services/api/apiClient';
+import { apiRequest } from '@/services/api/apiClient';
 
-const mockGetAuthToken = vi.mocked(getAuthToken);
-
-// Mock global fetch
-const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
+const mockApiRequest = vi.mocked(apiRequest);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetAuthToken.mockResolvedValue('fake-token');
 });
 
 describe('exportInvoices', () => {
@@ -40,33 +35,23 @@ describe('exportInvoices', () => {
       },
     };
 
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(responseData),
-    });
+    mockApiRequest.mockResolvedValue(responseData);
 
     const result = await exportInvoices(payload);
     expect(result).toEqual(responseData);
-    expect(mockFetch).toHaveBeenCalledOnce();
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockApiRequest).toHaveBeenCalledOnce();
+    expect(mockApiRequest).toHaveBeenCalledWith(
       expect.stringContaining('exportInvoices'),
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer fake-token',
-        }),
-      }),
+      'POST',
+      payload
     );
   });
 
-  it('throws ExportError on non-ok response with error details array', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({
-        error: 'Validation failed',
-        details: ['invoices[0].supplierId is required'],
-        code: 'VALIDATION_ERROR',
-      }),
+  it('throws ExportError on apiRequest error with details array', async () => {
+    mockApiRequest.mockRejectedValue({
+      message: 'Validation failed',
+      details: ['invoices[0].supplierId is required'],
+      code: 'VALIDATION_ERROR',
     });
 
     await expect(exportInvoices(payload)).rejects.toThrow(ExportError);
@@ -82,13 +67,10 @@ describe('exportInvoices', () => {
     }
   });
 
-  it('throws ExportError on non-ok response with string details', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({
-        error: 'Server error',
-        details: 'Something went wrong',
-      }),
+  it('throws ExportError on apiRequest error with string details', async () => {
+    mockApiRequest.mockRejectedValue({
+      message: 'Server error',
+      details: ['Something went wrong'],
     });
 
     try {
@@ -99,11 +81,8 @@ describe('exportInvoices', () => {
     }
   });
 
-  it('throws ExportError with default message when json parse fails', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      json: () => Promise.reject(new Error('parse error')),
-    });
+  it('throws ExportError with default message when no message is provided', async () => {
+    mockApiRequest.mockRejectedValue({});
 
     try {
       await exportInvoices(payload);
@@ -115,7 +94,7 @@ describe('exportInvoices', () => {
   });
 
   it('throws when user is not authenticated', async () => {
-    mockGetAuthToken.mockRejectedValue(new Error('Πρέπει να είστε συνδεδεμένος'));
+    mockApiRequest.mockRejectedValue(new Error('Πρέπει να είστε συνδεδεμένος'));
 
     await expect(exportInvoices(payload)).rejects.toThrow('Πρέπει να είστε συνδεδεμένος');
   });

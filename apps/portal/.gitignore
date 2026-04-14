@@ -17,5 +17,5 @@ pwa-client/dist/
 .idea/
 
 
-clients.json
+clients--copy.json
 pwa-client/.firebaserc

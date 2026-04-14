@@ -69,3 +69,7 @@ node_modules/
 .dataconnect
 dev-dist/
 .env.*
+
+# Playwright
+playwright-report/
+test-results/
