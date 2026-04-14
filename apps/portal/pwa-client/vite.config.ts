@@ -48,9 +48,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'firebase-app': ['firebase/app'],
-          'firebase-auth': ['firebase/auth'],
-          'firebase-firestore': ['firebase/firestore'],
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
         },
       },
