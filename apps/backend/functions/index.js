@@ -396,14 +396,20 @@ export const updatePaymentStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
       };
 
       // 14. Update target invoice document
-      tx.update(invoiceRef, {
+      const updates = {
         paymentStatus: newPaymentStatus,
         paidAmount: newPaidAmount,
         unpaidAmount: newUnpaidAmount,
         lastPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
         paymentHistory: admin.firestore.FieldValue.arrayUnion(paymentEntry),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (newPaymentStatus === PAYMENT_STATUS.paid) {
+        updates.settlementDate = paymentDate;
+      }
+
+      tx.update(invoiceRef, updates);
 
       // 15. Update credit invoice if used
       if (creditInvoiceRef && actualCreditUsed > 0) {
@@ -600,6 +606,17 @@ export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
         updatedFields.push('dueDate');
       }
 
+      if (fields.paymentHistory !== undefined) {
+        const updatedHistory = fields.paymentHistory.map(entry => ({
+          ...entry,
+          paymentDate: entry.paymentDate ? admin.firestore.Timestamp.fromDate(new Date(entry.paymentDate)) : admin.firestore.Timestamp.now()
+        }));
+        updates.paymentHistory = updatedHistory;
+        updatedFields.push('paymentHistory');
+        
+        // We will calculate settlementDate after we know the final paymentStatus
+      }
+
       // Process numeric fields
       if (fields.netAmount !== undefined) {
         updates.netAmount = fields.netAmount;
@@ -649,6 +666,24 @@ export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
         updates.paymentStatus = derivePaymentStatus(newPaidAmount, newTotalAmount);
       }
 
+      // If paymentStatus is paid (either newly derived or already was), calculate settlementDate
+      const finalPaymentStatus = updates.paymentStatus || invoiceData.paymentStatus;
+      if (finalPaymentStatus === PAYMENT_STATUS.paid) {
+        const historyToUse = updates.paymentHistory || invoiceData.paymentHistory || [];
+        if (historyToUse.length > 0) {
+          let latestDate = historyToUse[0].paymentDate;
+          for (const entry of historyToUse) {
+            if (entry.paymentDate && typeof entry.paymentDate.toMillis === 'function' && typeof latestDate.toMillis === 'function' && entry.paymentDate.toMillis() > latestDate.toMillis()) {
+              latestDate = entry.paymentDate;
+            }
+          }
+          updates.settlementDate = latestDate;
+        } else if (updates.invoiceDate || invoiceData.invoiceDate) {
+          // Fallback to invoiceDate if no history exists
+          updates.settlementDate = updates.invoiceDate || invoiceData.invoiceDate;
+        }
+      }
+
       // 6. Update invoice document
       tx.update(invoiceRef, updates);
 
@@ -664,6 +699,51 @@ export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
     });
 
     console.log(`Invoice fields updated for ${invoiceId}:`, result.updatedFields);
+
+    // 7. Sync financial entries if paymentHistory was updated
+    if (result.updatedFields.includes('paymentHistory')) {
+      try {
+        const financialEntriesRef = db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION);
+        const entriesSnapshot = await financialEntriesRef
+          .where('source', '==', ENTRY_SOURCE.invoicePayment)
+          .where('metadata.invoiceId', '==', invoiceId)
+          .get();
+
+        if (!entriesSnapshot.empty) {
+          const batch = db.batch();
+          let updatedCount = 0;
+
+          // We try to match financial entries to paymentHistory entries by amount and approximate time
+          // Since we don't have a strict 1:1 ID mapping, we'll just update all entries to the latest paymentDate
+          // or try to match them. For simplicity, if there's only 1 entry, we sync it with the 1 paymentHistory.
+          // If there are multiple, we'll try to match by amount.
+          
+          const history = fields.paymentHistory;
+          
+          for (const doc of entriesSnapshot.docs) {
+            const entryData = doc.data();
+            // Find a matching payment history entry by amount
+            const matchingHistory = history.find(h => h.amount === entryData.amount || h.cashAmount === entryData.amount);
+            
+            if (matchingHistory && matchingHistory.paymentDate) {
+              const newDate = admin.firestore.Timestamp.fromDate(new Date(matchingHistory.paymentDate));
+              // Only update if date changed
+              if (entryData.date && typeof entryData.date.toMillis === 'function' && entryData.date.toMillis() !== newDate.toMillis()) {
+                batch.update(doc.ref, { date: newDate, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                updatedCount++;
+              }
+            }
+          }
+
+          if (updatedCount > 0) {
+            await batch.commit();
+            console.log(`Synced ${updatedCount} financial entries for invoice ${invoiceId}`);
+          }
+        }
+      } catch (syncError) {
+        console.error('Failed to sync financial entries after paymentHistory update:', syncError);
+      }
+    }
 
     return res.status(200).json({
       success: true,

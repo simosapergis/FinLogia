@@ -151,6 +151,7 @@ export const handleInboundEmail = onRequest(
             ownerName,
             bucket: bucketName,
             storageFolder: `businesses/${businessId}/uploads/${invoiceId}`,
+            isPaidAtUpload: true, // Invoices from email are always marked as paid
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });

@@ -158,6 +158,21 @@
                 </div>
               </div>
 
+              <!-- Payment Date section -->
+              <div class="mb-6">
+                <label class="mb-2 block text-sm font-medium text-slate-700">Ημερομηνία Πληρωμής</label>
+                <div class="relative">
+                  <input
+                    v-model="paymentDate"
+                    type="date"
+                    lang="el-GR"
+                    class="h-14 w-full rounded-xl border-2 border-slate-200 bg-white px-4 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/20"
+                    :class="{ 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/20': paymentDateError }"
+                  />
+                </div>
+                <p v-if="paymentDateError" class="mt-2 text-sm text-rose-600">{{ paymentDateError }}</p>
+              </div>
+
               <!-- Amount input section -->
               <div class="mb-6" v-if="remainingAmountToPay > 0">
                 <label class="mb-2 block text-sm font-medium text-slate-700">Ποσό Πληρωμής (Μετρητά/Κάρτα)</label>
@@ -240,11 +255,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'submit', payload: { invoiceId: string; supplierId: string; amount: number; creditInvoiceId?: string; creditAmountUsed?: number }): void;
+  (e: 'submit', payload: { invoiceId: string; supplierId: string; amount: number; paymentDate: string; creditInvoiceId?: string; creditAmountUsed?: number }): void;
   (e: 'retry'): void;
 }>();
 
 const amount = ref<number | null>(null);
+const paymentDate = ref<string>('');
 const useCredit = ref(false);
 const selectedCreditId = ref<string>('');
 const creditAmountUsed = ref<number | null>(null);
@@ -256,6 +272,7 @@ watch(() => props.isOpen, (open) => {
     useCredit.value = false;
     selectedCreditId.value = '';
     creditAmountUsed.value = null;
+    paymentDate.value = new Date().toISOString().split('T')[0];
   }
 });
 
@@ -298,7 +315,13 @@ const amountError = computed(() => {
   return null;
 });
 
+const paymentDateError = computed(() => {
+  if (!paymentDate.value) return 'Η ημερομηνία είναι υποχρεωτική';
+  return null;
+});
+
 const isValid = computed(() => {
+  if (!paymentDate.value) return false;
   if (useCredit.value) {
     if (!selectedCreditId.value || creditAmountError.value) return false;
     if (remainingAmountToPay.value === 0) return true; // Fully covered by credit
@@ -316,6 +339,7 @@ const handleSubmit = () => {
     invoiceId: props.invoiceId,
     supplierId: props.supplierId,
     amount: (amount.value || 0) + (useCredit.value && creditAmountUsed.value ? creditAmountUsed.value : 0),
+    paymentDate: paymentDate.value,
     creditInvoiceId: useCredit.value ? selectedCreditId.value : undefined,
     creditAmountUsed: useCredit.value && creditAmountUsed.value ? creditAmountUsed.value : undefined,
   });

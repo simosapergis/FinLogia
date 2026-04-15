@@ -250,8 +250,22 @@
                 </dd>
               </div>
 
-              <!-- Paid Amount -->
+              <!-- Unpaid Amount (always read-only) -->
               <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+                <dt class="text-xs uppercase tracking-wide text-slate-400">ΑΝΕΞΟΦΛΗΤΟ ΠΟΣΟ</dt>
+                <dd class="mt-1">
+                  <span v-if="isEditing" class="text-lg font-semibold" :class="calculatedUnpaidColor">
+                    € {{ formattedCalculatedUnpaid }}
+                    <span class="ml-1 text-xs font-normal text-slate-400">(υπολογίζεται αυτόματα)</span>
+                  </span>
+                  <span v-else class="text-lg font-semibold" :class="unpaidColor">
+                    € {{ formattedUnpaid }}
+                  </span>
+                </dd>
+              </div>
+
+              <!-- Paid Amount -->
+              <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100 sm:col-span-2">
                 <dt class="text-xs uppercase tracking-wide text-slate-400">ΕΞΟΦΛΗΜΕΝΟ ΠΟΣΟ</dt>
                 <dd class="mt-1">
                   <div v-if="isEditing" class="relative">
@@ -276,20 +290,30 @@
                     </p>
                   </div>
                 </dd>
-              </div>
 
-              <!-- Unpaid Amount (always read-only) -->
-              <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                <dt class="text-xs uppercase tracking-wide text-slate-400">ΑΝΕΞΟΦΛΗΤΟ ΠΟΣΟ</dt>
-                <dd class="mt-1">
-                  <span v-if="isEditing" class="text-lg font-semibold" :class="calculatedUnpaidColor">
-                    € {{ formattedCalculatedUnpaid }}
-                    <span class="ml-1 text-xs font-normal text-slate-400">(υπολογίζεται αυτόματα)</span>
-                  </span>
-                  <span v-else class="text-lg font-semibold" :class="unpaidColor">
-                    € {{ formattedUnpaid }}
-                  </span>
-                </dd>
+                <!-- Payment History -->
+                <div v-if="(isEditing ? editForm.paymentHistory : invoice.paymentHistory)?.length > 0" class="mt-4 border-t border-slate-100 pt-3">
+                  <p class="text-xs font-medium text-slate-500 mb-2">Ιστορικό Πληρωμών:</p>
+                  <ul class="space-y-2">
+                    <li v-for="(entry, index) in (isEditing ? editForm.paymentHistory : invoice.paymentHistory)" :key="index" class="flex flex-col gap-1 text-sm">
+                      <div class="flex items-center justify-between">
+                        <div v-if="isEditing" class="flex items-center gap-2">
+                          <input
+                            v-model="editForm.paymentHistory[index].paymentDate"
+                            type="date"
+                            lang="el-GR"
+                            class="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20"
+                          />
+                        </div>
+                        <span v-else class="font-medium text-slate-700">
+                          {{ formatDate(entry.paymentDate) }}
+                        </span>
+                        <span class="font-semibold text-emerald-600">€ {{ formatCurrency(entry.amount) }}</span>
+                      </div>
+                      <span v-if="entry.notes" class="text-xs text-slate-400">{{ entry.notes }}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
 
               <!-- PDF File -->
@@ -384,7 +408,7 @@ import StatusBadge from '@/components/StatusBadge.vue';
 import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
 import { updateInvoiceFields } from '@/services/api/updateInvoiceFields';
-import { formatCurrency, formatDateTime } from '@/utils/date';
+import { formatCurrency, formatDateTime, formatDate } from '@/utils/date';
 import { useNotifications } from '@/composables/useNotifications';
 
 const props = defineProps<{
@@ -420,6 +444,11 @@ interface EditForm {
   vatAmount: number | null;
   paidAmount: number | null;
   isCredit: boolean;
+  paymentHistory: Array<{
+    amount: number;
+    paymentDate: string;
+    notes?: string;
+  }>;
 }
 
 const editForm = ref<EditForm>({
@@ -432,6 +461,7 @@ const editForm = ref<EditForm>({
   vatAmount: null,
   paidAmount: null,
   isCredit: false,
+  paymentHistory: [],
 });
 
 // Helper to parse date to YYYY-MM-DD format
@@ -459,6 +489,11 @@ const initializeEditForm = () => {
     vatAmount: props.invoice.vatAmount ?? null,
     paidAmount: props.invoice.paidAmount ?? 0,
     isCredit: props.invoice.isCredit ?? false,
+    paymentHistory: (props.invoice.paymentHistory || []).map((entry) => ({
+      amount: entry.amount,
+      paymentDate: toDateInputValue(entry.paymentDate),
+      notes: entry.notes,
+    })),
   };
 };
 
@@ -479,6 +514,12 @@ const hasChanges = computed(() => {
   const inv = props.invoice;
   const form = editForm.value;
   
+  const hasHistoryChanges = form.paymentHistory.some((entry, i) => {
+    const originalEntry = inv.paymentHistory?.[i];
+    if (!originalEntry) return true;
+    return entry.paymentDate !== toDateInputValue(originalEntry.paymentDate);
+  });
+  
   return (
     form.supplierName !== (inv.supplierName ?? '') ||
     form.supplierTaxNumber !== (inv.supplierTaxNumber ?? '') ||
@@ -488,7 +529,8 @@ const hasChanges = computed(() => {
     form.netAmount !== (inv.netAmount ?? null) ||
     form.vatAmount !== (inv.vatAmount ?? null) ||
     form.paidAmount !== (inv.paidAmount ?? 0) ||
-    form.isCredit !== (inv.isCredit ?? false)
+    form.isCredit !== (inv.isCredit ?? false) ||
+    hasHistoryChanges
   );
 });
 
@@ -561,6 +603,19 @@ const saveChanges = async () => {
       fields.isCredit = form.isCredit;
     }
 
+    const hasHistoryChanges = form.paymentHistory.some((entry, i) => {
+      const originalEntry = inv.paymentHistory?.[i];
+      if (!originalEntry) return true;
+      return entry.paymentDate !== toDateInputValue(originalEntry.paymentDate);
+    });
+
+    if (hasHistoryChanges && inv.paymentHistory) {
+      fields.paymentHistory = inv.paymentHistory.map((entry, i) => ({
+        ...entry,
+        paymentDate: form.paymentHistory[i].paymentDate
+      }));
+    }
+
     await updateInvoiceFields({
       supplierId: props.invoice.supplierId,
       invoiceId: props.invoice.id,
@@ -580,6 +635,7 @@ const saveChanges = async () => {
       paidAmount: form.paidAmount ?? 0,
       isCredit: form.isCredit,
       unpaidAmount: calculatedUnpaid.value,
+      paymentHistory: fields.paymentHistory as any || props.invoice.paymentHistory,
     };
 
     emit('updated', updatedInvoice);

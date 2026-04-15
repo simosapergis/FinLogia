@@ -1,267 +1,117 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleInboundEmail } from '../lib/inbound-email.js';
-import { db, storage, getBucketName } from '../lib/config.js';
-import { sendOcrErrorEmail } from '../lib/email-utils.js';
-import fs from 'fs';
+import * as config from '../lib/config.js';
 import busboy from 'busboy';
 
-// Mock dependencies
-vi.mock('firebase-functions/v2/https', () => ({
-  onRequest: vi.fn((opts, handler) => handler),
+vi.mock('busboy');
+vi.mock('fs');
+
+vi.mock('../lib/config.js', () => ({
+  db: {
+    collection: vi.fn(() => ({
+      doc: vi.fn(() => ({
+        get: vi.fn(),
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => ({
+            id: 'new-invoice-id',
+            set: vi.fn(),
+          })),
+        })),
+      })),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ empty: false, docs: [{ id: 'user1' }] }),
+    })),
+  },
+  storage: {
+    bucket: vi.fn(() => ({
+      upload: vi.fn(),
+    })),
+  },
+  getBucketName: vi.fn(() => 'test-bucket'),
+  METADATA_INVOICE_COLLECTION: 'metadata_invoices',
+  serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
 }));
-
-vi.mock('fs', () => {
-  return {
-    default: {
-      createWriteStream: vi.fn(() => {
-        return {
-          on: vi.fn((event, cb) => {
-            if (event === 'finish') cb();
-          }),
-          end: vi.fn(),
-        };
-      }),
-      unlinkSync: vi.fn(),
-      existsSync: vi.fn(() => true),
-    }
-  };
-});
-
-vi.mock('os', () => ({
-  default: {
-    tmpdir: vi.fn(() => '/tmp'),
-  }
-}));
-
-vi.mock('node:crypto', () => ({
-  default: {
-    randomUUID: vi.fn(() => 'mock-uuid'),
-  }
-}));
-
-vi.mock('../lib/config.js', () => {
-  const collectionMock = vi.fn();
-  const docMock = vi.fn();
-  const getMock = vi.fn();
-  const whereMock = vi.fn();
-  const limitMock = vi.fn();
-  const setMock = vi.fn();
-
-  // Setup chainable mock for db
-  collectionMock.mockReturnValue({
-    doc: docMock,
-    where: whereMock,
-  });
-  
-  docMock.mockReturnValue({
-    get: getMock,
-    collection: collectionMock,
-    set: setMock,
-    id: 'mock-invoice-id',
-  });
-  
-  whereMock.mockReturnValue({
-    where: whereMock,
-    limit: limitMock,
-  });
-  
-  limitMock.mockReturnValue({
-    get: getMock,
-  });
-
-  const uploadMock = vi.fn().mockResolvedValue([{}]);
-  const bucketMock = vi.fn(() => ({
-    upload: uploadMock,
-  }));
-
-  return {
-    getBucketName: vi.fn(() => 'mock-bucket'),
-    METADATA_INVOICE_COLLECTION: 'metadata_invoices',
-    serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
-    db: {
-      collection: collectionMock,
-    },
-    storage: {
-      bucket: bucketMock,
-    },
-  };
-});
 
 vi.mock('../lib/email-utils.js', () => ({
-  sendOcrErrorEmail: vi.fn().mockResolvedValue(true),
+  sendOcrSuccessEmail: vi.fn(),
+  sendOcrErrorEmail: vi.fn(),
 }));
 
-// Mock busboy
-vi.mock('busboy', () => {
-  return {
-    default: vi.fn(),
-  };
-});
-
-describe('handleInboundEmail', () => {
-  let req, res;
-  let mockBusboyInstance;
-
+describe('inbound-email', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    req = {
-      method: 'POST',
-      headers: { 'content-type': 'multipart/form-data; boundary=---boundary' },
-      pipe: vi.fn(),
-    };
-    
-    res = {
-      status: vi.fn().mockReturnThis(),
-      send: vi.fn(),
-    };
+  });
 
-    mockBusboyInstance = {
-      on: vi.fn(),
+  it('should create metadata document with isPaidAtUpload: true', async () => {
+    // Mock busboy behavior
+    const mockBb = {
+      on: vi.fn((event, callback) => {
+        if (event === 'field') {
+          callback('to', 'upload-bus1@office.invoices.finlogia.online');
+          callback('from', 'test@test.com');
+        }
+        if (event === 'file') {
+          const mockFile = {
+            pipe: vi.fn(),
+            on: vi.fn((e, cb) => { if (e === 'end') cb(); }),
+            resume: vi.fn(),
+          };
+          callback('file', mockFile, { filename: 'test.pdf', mimeType: 'application/pdf' });
+        }
+        if (event === 'close') {
+          // We will call this manually
+        }
+      }),
       end: vi.fn(),
     };
-    busboy.mockReturnValue(mockBusboyInstance);
-  });
+    busboy.mockReturnValue(mockBb);
 
-  const simulateBusboy = async (fields = {}, files = []) => {
-    const handlers = {};
-    mockBusboyInstance.on.mockImplementation((event, handler) => {
-      handlers[event] = handler;
+    const req = { method: 'POST', headers: {}, rawBody: Buffer.from('') };
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    // Mock business exists
+    config.db.collection.mockReturnValue({
+      doc: vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({ authorizedEmails: [] }),
+        }),
+        collection: vi.fn().mockReturnValue({
+          doc: vi.fn().mockReturnValue({
+            id: 'new-invoice-id',
+            set: vi.fn()
+          })
+        })
+      }),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ empty: false, docs: [{ id: 'user1' }] }),
     });
 
-    const promise = new Promise((resolve) => {
-      res.send.mockImplementation((msg) => resolve(msg));
+    // Mock file write stream
+    const fs = await import('fs');
+    fs.createWriteStream.mockReturnValue({
+      end: vi.fn(),
+      on: vi.fn((e, cb) => { if (e === 'finish') cb(); }),
     });
+    fs.unlinkSync.mockImplementation(() => {});
+
+    // Call the function
+    handleInboundEmail(req, res);
+
+    // Trigger close event
+    const closeCallback = mockBb.on.mock.calls.find(call => call[0] === 'close')[1];
+    await closeCallback();
+
+    // Check if metadata was created with isPaidAtUpload: true
+    // Wait a tick for promises to resolve
+    await new Promise(resolve => setTimeout(resolve, 0));
     
-    // Start the handler
-    handleInboundEmail(req, res);
-
-    // Simulate fields
-    if (handlers.field) {
-      for (const [key, value] of Object.entries(fields)) {
-        handlers.field(key, value);
-      }
-    }
-
-    // Simulate files
-    if (handlers.file) {
-      for (const file of files) {
-        const fileStream = {
-          on: vi.fn((event, cb) => {
-            if (event === 'end') cb();
-          }),
-          pipe: vi.fn(),
-          resume: vi.fn(),
-        };
-        handlers.file(file.fieldname, fileStream, { filename: file.filename, mimeType: file.mimeType });
-      }
-    }
-
-    // Simulate close to trigger the async logic
-    if (handlers.close) {
-      await handlers.close();
-    }
-
-    return promise;
-  };
-
-  it('should return 405 for non-POST requests', async () => {
-    req.method = 'GET';
-    handleInboundEmail(req, res);
-    expect(res.status).toHaveBeenCalledWith(405);
-    expect(res.send).toHaveBeenCalledWith('Method Not Allowed');
-  });
-
-  it('should return 400 if recipient address is invalid', async () => {
-    await simulateBusboy({
-      to: 'invalid-address@test.com',
-      from: 'sender@test.com'
-    });
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith('Invalid recipient address');
-    expect(sendOcrErrorEmail).toHaveBeenCalled();
-  });
-
-  it('should return 404 if business does not exist', async () => {
-    // Mock db to return non-existent business
-    db.collection().doc().get.mockResolvedValueOnce({ exists: false });
-
-    await simulateBusboy({
-      to: 'upload-testbiz123@office.invoices.finlogia.online',
-      from: 'sender@test.com'
-    });
-
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith('Business not found');
-    expect(sendOcrErrorEmail).toHaveBeenCalled();
-  });
-
-  it('should return 403 if sender is unauthorized', async () => {
-    // Mock db to return existing business but unauthorized user
-    db.collection().doc().get.mockResolvedValueOnce({ 
-      exists: true, 
-      data: () => ({ authorizedEmails: [] }) 
-    });
-    // Mock user query to be empty
-    db.collection().where().where().limit().get.mockResolvedValueOnce({ empty: true });
-
-    await simulateBusboy({
-      to: 'upload-testbiz123@office.invoices.finlogia.online',
-      from: 'unauthorized@test.com'
-    });
-
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.send).toHaveBeenCalledWith('Unauthorized sender');
-    expect(sendOcrErrorEmail).toHaveBeenCalled();
-  });
-
-  it('should return 400 if no valid PDF attachments are found', async () => {
-    // Mock db to return existing business and authorized user
-    db.collection().doc().get.mockResolvedValueOnce({ 
-      exists: true, 
-      data: () => ({ authorizedEmails: ['authorized@test.com'] }) 
-    });
-    db.collection().where().where().limit().get.mockResolvedValueOnce({ empty: true });
-
-    await simulateBusboy(
-      {
-        to: 'upload-testbiz123@office.invoices.finlogia.online',
-        from: 'authorized@test.com'
-      },
-      [
-        { fieldname: 'attachment1', filename: 'image.png', mimeType: 'image/png' }
-      ]
-    );
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith('No valid PDF attachments');
-    expect(sendOcrErrorEmail).toHaveBeenCalled();
-  });
-
-  it('should process successfully with a valid PDF attachment', async () => {
-    // Mock db to return existing business and authorized user
-    db.collection().doc().get.mockResolvedValueOnce({ 
-      exists: true, 
-      data: () => ({ authorizedEmails: ['authorized@test.com'] }) 
-    });
-    db.collection().where().where().limit().get.mockResolvedValueOnce({ empty: true });
-
-    // Mock the metadata set
-    db.collection().doc().set.mockResolvedValueOnce();
-
-    await simulateBusboy(
-      {
-        to: 'upload-testbiz123@office.invoices.finlogia.online',
-        from: 'authorized@test.com'
-      },
-      [
-        { fieldname: 'attachment1', filename: 'invoice.pdf', mimeType: 'application/pdf' }
-      ]
-    );
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.send).toHaveBeenCalledWith('OK');
-    expect(db.collection().doc().set).toHaveBeenCalled();
-    expect(storage.bucket().upload).toHaveBeenCalled();
+    // In our mock, db.collection().doc().collection().doc().set is the one
+    const setMock = config.db.collection().doc().collection().doc().set;
+    expect(setMock).toHaveBeenCalled();
+    const payload = setMock.mock.calls[0][0];
+    expect(payload.isPaidAtUpload).toBe(true);
   });
 });

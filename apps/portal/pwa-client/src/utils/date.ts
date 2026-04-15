@@ -13,6 +13,20 @@ export const formatCurrency = (value?: number | null, includeCurrencySymbol = fa
   return includeCurrencySymbol ? `€ ${formatted}` : formatted;
 };
 
+export const formatDate = (value?: string | Date | { seconds: number }) => {
+  if (!value) return 'Unknown';
+
+  const date = typeof value === 'object' && 'seconds' in value
+    ? new Date(value.seconds * 1000)
+    : typeof value === 'string' ? new Date(value) : value;
+
+  return new Intl.DateTimeFormat('el-GR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+};
+
 export const formatDateTime = (value?: string | Date | { seconds: number }) => {
   if (!value) return 'Unknown';
 

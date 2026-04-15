@@ -16,6 +16,14 @@ export interface UpdateInvoiceFieldsRequest {
     isCredit?: boolean;
     currency?: string;
     paidAmount?: number;
+    paymentHistory?: Array<{
+      amount: number;
+      paymentDate: string;
+      paymentMethod?: string;
+      notes?: string;
+      creditInvoiceId?: string;
+      creditAmountUsed?: number;
+    }>;
   };
 }
 
