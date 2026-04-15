@@ -40,6 +40,8 @@ Flat structure scoped by `businessId`:
 ## 5. Do's and Don'ts
 
 **Do:**
+- Always write or update tests for every change (fix, feature, or addition) to cover the new cases. If you feel that tests are redundant for a specific change, you may skip them, but you MUST notify the user in your response when the work is finished.
+- **CRITICAL:** Agent work is considered "Done" ONLY if all tests (both existing and newly added) have been run and are passing. Use `npm run test:all` from the workspace root to run the entire test suite across all workspaces.
 - Always scope database queries and storage paths with `businessId`.
 - Use `apiRequest` in the frontend to automatically inject `businessId`.
 - Implement Cursor-based Pagination for unbounded lists to protect performance and cost.

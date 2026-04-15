@@ -13,7 +13,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "cd ../../backend && npm version ${nextRelease.version} --no-git-tag-version"
+        "prepareCmd": "cd ../../backend && npm version ${nextRelease.version} --no-git-tag-version && cd ../portal/pwa-client && node scripts/generate-release-notes.js"
       }
     ],
     [
@@ -23,6 +23,7 @@
           "package.json",
           "package-lock.json",
           "CHANGELOG.md",
+          "public/release-notes.json",
           "../../backend/package.json",
           "../../backend/package-lock.json"
         ],

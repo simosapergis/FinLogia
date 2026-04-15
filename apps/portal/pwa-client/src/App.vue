@@ -325,6 +325,13 @@
     >
       v{{ appVersion }}
     </div>
+
+    <!-- Release Notes Modal -->
+    <ReleaseNotesModal
+      v-if="showReleaseNotes"
+      :previous-version="previousVersion"
+      @close="closeReleaseNotes"
+    />
   </div>
 </template>
 
@@ -361,6 +368,7 @@ import { useUiStore } from '@/store/uiStore';
 import { useAuth } from '@/composables/useAuth';
 import { useInvoiceNotifications } from '@/composables/useInvoiceNotifications';
 import { useUserStore } from '@/store/userStore';
+import ReleaseNotesModal from '@/components/ReleaseNotesModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -380,6 +388,8 @@ const userMenuOpen = ref(false);
 const sidebarOpen = ref(false);
 const isUpdating = ref(false);
 const isStandalone = ref(false);
+const showReleaseNotes = ref(false);
+const previousVersion = ref('');
 
 const isAccountant = computed(() => {
   return userStore.isAccountant || route.path.startsWith('/accountant');
@@ -407,15 +417,27 @@ const handleUpdate = async () => {
   if (!uiStore.updateFunction) return;
   
   isUpdating.value = true;
+  localStorage.setItem('previous_version', appVersion);
+  
   // Add a small delay for UX so the user sees the loader animation
   await new Promise((resolve) => setTimeout(resolve, 800));
   
   try {
     await uiStore.updateFunction(true);
+    
+    // Fallback in case the service worker doesn't automatically reload the page
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
   } catch (error) {
     console.error('Failed to update service worker:', error);
     isUpdating.value = false;
   }
+};
+
+const closeReleaseNotes = () => {
+  showReleaseNotes.value = false;
+  localStorage.removeItem('previous_version');
 };
 
 // Initialize notification listener
@@ -423,6 +445,16 @@ onMounted(() => {
   initializeNotifications();
   isStandalone.value = window.matchMedia('(display-mode: standalone)').matches || 
                        (window.navigator as any).standalone === true;
+                       
+  // Check for release notes
+  const prevVer = localStorage.getItem('previous_version');
+  if (prevVer && prevVer !== appVersion) {
+    previousVersion.value = prevVer;
+    showReleaseNotes.value = true;
+  } else if (prevVer === appVersion) {
+    // Clean up if it matches (shouldn't happen normally, but just in case)
+    localStorage.removeItem('previous_version');
+  }
 });
 
 const navLinks = computed(() => {
