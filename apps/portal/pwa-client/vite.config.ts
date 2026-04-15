@@ -58,6 +58,6 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'scripts/**/*.test.ts', 'scripts/**/*.spec.ts'],
   } satisfies UserConfig['test'],
 });

@@ -68,6 +68,11 @@ jobs:
         run: npm ci
         working-directory: apps/portal/pwa-client
         
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
       - name: Semantic Release
         run: npx semantic-release
         working-directory: apps/portal/pwa-client

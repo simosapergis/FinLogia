@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/*"
-  ]
+    "apps/*",
+    "apps/portal/pwa-client",
+    "apps/backend",
+    "apps/backend/functions"
+  ],
+  "scripts": {
+    "test:all": "npm run test:run -w pwa-client && npm run test -w functions && npm run test:rules -w finlogia-backend && npm run test:integration -w finlogia-backend"
+  }
 }
