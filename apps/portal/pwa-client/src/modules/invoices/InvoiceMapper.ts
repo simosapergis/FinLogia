@@ -26,6 +26,7 @@ export interface Invoice {
   currency: string;
   status: InvoiceStatus;
   paymentStatus?: 'paid' | 'unpaid' | 'partially_paid';
+  settlementDate?: string | { seconds: number };
   paymentHistory?: {
     amount: number;
     paymentDate: string | { seconds: number };

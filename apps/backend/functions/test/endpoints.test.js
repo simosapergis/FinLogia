@@ -247,6 +247,191 @@ describe('API Endpoints & Business Logic', () => {
         success: true,
       }));
     });
+  });
+
+  describe('updatePaymentStatus_v2 - Settlement Date', () => {
+    it('should update settlementDate when invoice becomes fully paid', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' }
+      });
+      auth.getUserDisplayName.mockReturnValue('Test User');
+
+      const mockTx = {
+        getAll: vi.fn().mockResolvedValue([
+          { 
+            exists: true, 
+            data: () => ({ 
+              totalAmount: 100, 
+              paidAmount: 50, 
+              paymentStatus: 'partially_paid',
+              paymentHistory: [{ amount: 50, paymentDate: { toMillis: () => 1000 } }]
+            }) 
+          },
+          { exists: false }
+        ]),
+        update: vi.fn(),
+      };
+      
+      const configModule = await import('../lib/config.js');
+      configModule.db.runTransaction.mockImplementationOnce(async (callback) => {
+        return await callback(mockTx);
+      });
+
+      req.body = {
+        businessId: 'businessA',
+        supplierId: 'supp1',
+        invoiceId: 'inv1',
+        action: 'pay',
+        amount: 50,
+        paymentDate: '2023-10-15T00:00:00Z'
+      };
+
+      await updatePaymentStatus_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockTx.update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          paymentStatus: 'paid',
+          settlementDate: expect.anything(),
+        })
+      );
+    });
+
+    it('should NOT update settlementDate when invoice is partially paid', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' }
+      });
+      auth.getUserDisplayName.mockReturnValue('Test User');
+
+      const mockTx = {
+        getAll: vi.fn().mockResolvedValue([
+          { 
+            exists: true, 
+            data: () => ({ 
+              totalAmount: 100, 
+              paidAmount: 0, 
+              paymentStatus: 'unpaid',
+            }) 
+          },
+          { exists: false }
+        ]),
+        update: vi.fn(),
+      };
+      
+      const configModule = await import('../lib/config.js');
+      configModule.db.runTransaction.mockImplementationOnce(async (callback) => {
+        return await callback(mockTx);
+      });
+
+      req.body = {
+        businessId: 'businessA',
+        supplierId: 'supp1',
+        invoiceId: 'inv1',
+        action: 'partial',
+        amount: 50,
+        paymentDate: '2023-10-15T00:00:00Z'
+      };
+
+      await updatePaymentStatus_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      // settlementDate should not be in the update payload
+      expect(mockTx.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          settlementDate: expect.anything(),
+        })
+      );
+    });
+  });
+
+  describe('updateInvoiceFields_v2', () => {
+    it('should recalculate settlementDate when paymentHistory is updated on a paid invoice', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' }
+      });
+      auth.getUserDisplayName.mockReturnValue('Test User');
+
+      const mockTx = {
+        get: vi.fn().mockResolvedValue({ 
+          exists: true, 
+          data: () => ({ 
+            totalAmount: 100, 
+            paidAmount: 100, 
+            paymentStatus: 'paid',
+            paymentHistory: [{ amount: 100, paymentDate: { toMillis: () => 1000 } }]
+          }) 
+        }),
+        update: vi.fn(),
+      };
+      
+      const configModule = await import('../lib/config.js');
+      
+      // Mock db.collection for financial entries sync
+      configModule.db.collection.mockImplementation((path) => {
+        if (path === 'businesses') {
+          return {
+            doc: vi.fn().mockReturnValue({
+              collection: vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({
+                  empty: true,
+                  docs: []
+                }),
+                doc: vi.fn().mockReturnValue({
+                  set: vi.fn(),
+                  update: vi.fn(),
+                  get: vi.fn().mockResolvedValue({ exists: true })
+                })
+              })
+            })
+          };
+        }
+        return {
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({ exists: true }),
+            set: vi.fn(),
+            update: vi.fn(),
+            collection: vi.fn().mockReturnValue({
+              doc: vi.fn().mockReturnValue({
+                set: vi.fn(),
+                update: vi.fn(),
+                get: vi.fn().mockResolvedValue({ exists: true })
+              })
+            })
+          })
+        };
+      });
+
+      configModule.db.runTransaction.mockImplementationOnce(async (callback) => {
+        return await callback(mockTx);
+      });
+
+      req.body = {
+        businessId: 'businessA',
+        supplierId: 'supp1',
+        invoiceId: 'inv1',
+        fields: {
+          paymentHistory: [
+            { amount: 100, paymentDate: '2023-10-20T00:00:00Z' }
+          ]
+        }
+      };
+
+      const { updateInvoiceFields_v2 } = await import('../index.js');
+      await updateInvoiceFields_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockTx.update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          settlementDate: expect.anything(), // Should be the new Timestamp
+        })
+      );
+    });
+  });
+
   describe('Admin Functions', () => {
     describe('createClientBusiness_v2', () => {
       it('should reject requests from non-admin users', async () => {
@@ -314,6 +499,8 @@ describe('API Endpoints & Business Logic', () => {
         }));
       });
     });
+  });
+  
   describe('Scheduled Functions', () => {
     describe('processRecurringExpenses_v2', () => {
       it('should process recurring expenses correctly', async () => {
@@ -359,6 +546,4 @@ describe('API Endpoints & Business Logic', () => {
       });
     });
   });
-});
-});
 });

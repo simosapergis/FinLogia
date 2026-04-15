@@ -92,6 +92,7 @@ const EDITABLE_INVOICE_FIELDS = [
   'vatRate',
   'paidAmount',
   'currency',
+  'paymentHistory',
 ];
 
 /**
@@ -152,6 +153,21 @@ function validateUpdateFieldsRequest(body) {
     const date = new Date(fields.dueDate);
     if (isNaN(date.getTime())) {
       errors.push('fields.dueDate must be a valid ISO date string');
+    }
+  }
+
+  if (fields.paymentHistory !== undefined) {
+    if (!Array.isArray(fields.paymentHistory)) {
+      errors.push('fields.paymentHistory must be an array');
+    } else {
+      for (const entry of fields.paymentHistory) {
+        if (entry.paymentDate !== undefined) {
+          const date = new Date(entry.paymentDate);
+          if (isNaN(date.getTime())) {
+            errors.push('fields.paymentHistory entries must have a valid paymentDate ISO string');
+          }
+        }
+      }
     }
   }
 

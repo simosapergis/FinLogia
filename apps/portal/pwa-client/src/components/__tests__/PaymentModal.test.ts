@@ -40,6 +40,10 @@ describe('PaymentModal.vue', () => {
     const amountInput = wrapper.find('input[type="number"]');
     await amountInput.setValue(500);
 
+    // Set payment date
+    const dateInput = wrapper.find('input[type="date"]');
+    await dateInput.setValue('2023-10-01');
+
     // Submit form by clicking the button
     const submitBtn = wrapper.findAll('button').find(b => b.text().includes('Καταχώρηση Πληρωμής'));
     if (submitBtn) {
@@ -53,6 +57,7 @@ describe('PaymentModal.vue', () => {
       invoiceId: 'inv123',
       supplierId: 'supp456',
       amount: 500,
+      paymentDate: '2023-10-01',
       creditInvoiceId: undefined,
       creditAmountUsed: undefined,
     }]);

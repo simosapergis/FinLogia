@@ -274,14 +274,16 @@ async function processInvoiceDocumentHandler(event) {
     };
 
     if (invoiceData.isPaidAtUpload) {
+      const parsedInvoiceDate = parseDate(mappedResult.invoiceDate);
       invoicePayload.paymentStatus = PAYMENT_STATUS.paid;
       invoicePayload.paidAmount = invoicePayload.totalAmount || 0;
       invoicePayload.unpaidAmount = 0;
+      invoicePayload.settlementDate = parsedInvoiceDate;
       invoicePayload.lastPaymentAt = admin.firestore.FieldValue.serverTimestamp();
       invoicePayload.paymentHistory = [
         {
           amount: invoicePayload.paidAmount,
-          paymentDate: admin.firestore.Timestamp.fromDate(getAthensToday().utcDate),
+          paymentDate: parsedInvoiceDate || admin.firestore.Timestamp.fromDate(getAthensToday().utcDate),
           paymentMethod: 'other',
           notes: 'Εξοφλήθηκε κατά τη σάρωση',
           recordedAt: admin.firestore.Timestamp.now(),

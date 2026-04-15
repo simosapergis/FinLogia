@@ -185,7 +185,6 @@ jobs:
           # Add extra frontend settings
           echo "VITE_FIREBASE_BUCKET_FOLDER=uploads" >> .env.local
           echo "VITE_INVOICE_EXPIRY_DAYS=7" >> .env.local
-          echo "VITE_INBOUND_EMAIL_DOMAIN=office-a.invoices.finlogia.online" >> .env.local
           
           # Dynamically set the Base URL for the current project in the matrix
           echo "VITE_BASE_URL=https://europe-west3-${{ matrix.project }}.cloudfunctions.net" >> .env.local

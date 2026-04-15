@@ -218,7 +218,7 @@ const { currentBusinessId } = storeToRefs(userStore);
 
 const inboundEmailAddress = computed(() => {
   if (!currentBusinessId.value) return '';
-  return `upload-${currentBusinessId.value}@${import.meta.env.VITE_INBOUND_EMAIL_DOMAIN}`;
+  return `upload-${currentBusinessId.value}@${import.meta.env.VITE_FIREBASE_PROJECT_ID}.invoices.finlogia.online`;
 });
 
 const copyEmailAddress = async () => {

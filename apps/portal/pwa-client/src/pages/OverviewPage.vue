@@ -385,7 +385,7 @@ const handlePaymentRetry = () => {
 
 const submitting = ref(false);
 
-const handlePaymentSubmit = async (payload: { invoiceId: string; supplierId: string; amount: number; creditInvoiceId?: string; creditAmountUsed?: number }) => {
+const handlePaymentSubmit = async (payload: { invoiceId: string; supplierId: string; amount: number; paymentDate: string; creditInvoiceId?: string; creditAmountUsed?: number }) => {
   if (submitting.value || !selectedInvoice.value) return;
 
   submitting.value = true;
@@ -398,7 +398,7 @@ const handlePaymentSubmit = async (payload: { invoiceId: string; supplierId: str
       invoiceId: payload.invoiceId,
       action: isFullPayment ? 'pay' : 'partial',
       amount: payload.amount,
-      paymentDate: new Date().toISOString(),
+      paymentDate: payload.paymentDate ? new Date(payload.paymentDate).toISOString() : new Date().toISOString(),
       creditInvoiceId: payload.creditInvoiceId,
       creditAmountUsed: payload.creditAmountUsed,
     });
