@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/simosapergis/FinLogia/compare/v1.1.1...v1.2.0) (2026-04-15)
+
+
+### Features
+
+* show release notes to the user on app version upgrade ([#10](https://github.com/simosapergis/FinLogia/issues/10)) ([82e75b9](https://github.com/simosapergis/FinLogia/commit/82e75b9a4706d5ad15a0719dff4b5b679fa587b2))
+
 ## [1.1.1](https://github.com/simosapergis/FinLogia/compare/v1.1.0...v1.1.1) (2026-04-15)
 
 
