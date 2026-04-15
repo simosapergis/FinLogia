@@ -1,6 +1,6 @@
 import archiver from 'archiver';
-import { PassThrough } from 'stream';
-import { pipeline } from 'stream/promises';
+import { PassThrough } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { admin, db, storage, getBucketName, SIGNED_URL_TTL_MS, serverTimestamp, formatAthensDate } from './config.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
