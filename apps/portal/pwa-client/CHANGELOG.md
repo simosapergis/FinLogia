@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/simosapergis/FinLogia/compare/v1.1.0...v1.1.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* version checkout ([39d203c](https://github.com/simosapergis/FinLogia/commit/39d203ca3c57fa813b39716d91ae81a0dbe22a50))
+
 # [1.1.0](https://github.com/simosapergis/FinLogia/compare/v1.0.0...v1.1.0) (2026-04-15)
 
 
