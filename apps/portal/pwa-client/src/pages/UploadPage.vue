@@ -12,27 +12,37 @@
       <div v-if="!draftInvoice" class="grid gap-4 sm:grid-cols-2">
         <button
           type="button"
-          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition disabled:cursor-not-allowed disabled:opacity-50"
+          :class="isDraggingPdf ? 'border-rose-500 bg-rose-100 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600'"
           :disabled="!canAddMoreInvoices || isBusy"
           @click="triggerPdfPicker"
+          @dragenter.prevent="!isMobile && (isDraggingPdf = true)"
+          @dragover.prevent="!isMobile && (isDraggingPdf = true)"
+          @dragleave.prevent="isDraggingPdf = false"
+          @drop.prevent="handlePdfDrop"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="pointer-events-none h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span class="font-semibold">PDF</span>
+          <span class="pointer-events-none font-semibold">PDF</span>
         </button>
 
         <button
           type="button"
-          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition disabled:cursor-not-allowed disabled:opacity-50"
+          :class="isDraggingImage ? 'border-blue-500 bg-blue-100 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'"
           :disabled="!canAddMoreInvoices || isBusy"
-          @click="showDraftSetup = true"
+          @click="showDraftSetup = true; pageLimitWarning = null"
+          @dragenter.prevent="!isMobile && (isDraggingImage = true)"
+          @dragover.prevent="!isMobile && (isDraggingImage = true)"
+          @dragleave.prevent="isDraggingImage = false"
+          @drop.prevent="handleImageDrop"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="pointer-events-none h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span class="font-semibold">Φωτογραφίες</span>
+          <span class="pointer-events-none font-semibold">Φωτογραφίες</span>
         </button>
       </div>
 
@@ -68,7 +78,7 @@
           <button
             type="button"
             class="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-            @click="showDraftSetup = false"
+            @click="cancelDraftSetup"
           >
             Ακύρωση
           </button>
@@ -76,7 +86,16 @@
       </div>
 
       <!-- Active Draft Workspace -->
-      <div v-if="draftInvoice" class="mt-6 rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm">
+      <div 
+        v-if="draftInvoice" 
+        ref="draftWorkspaceRef"
+        class="mt-6 rounded-2xl border-2 p-5 shadow-sm transition-colors"
+        :class="isDraggingDraft ? 'border-primary-500 bg-primary-50' : 'border-slate-200 bg-white'"
+        @dragenter.prevent="!isMobile && (isDraggingDraft = true)"
+        @dragover.prevent="!isMobile && (isDraggingDraft = true)"
+        @dragleave.prevent="isDraggingDraft = false"
+        @drop.prevent="handleDraftDrop"
+      >
         <div class="mb-4 flex items-center justify-between">
           <div>
             <h3 class="font-semibold text-slate-800">
@@ -140,7 +159,8 @@
             :key="invoice.id"
             :invoice="invoice"
             :index="index"
-            @remove="removeInvoice"
+            :warning="pageLimitWarning && index === invoices.length - 1 ? pageLimitWarning : null"
+            @remove="handleRemoveInvoice"
             @update:isPaid="updateInvoiceIsPaid"
           />
         </div>
@@ -192,7 +212,7 @@
 
       <div v-if="inboundEmailAddress" class="rounded-3xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
         <p class="font-semibold text-slate-700">Αποστολή μέσω Email</p>
-        <p class="mt-2">Προωθήστε τα τιμολόγιά σας (σε μορφή PDF) στην παρακάτω διεύθυνση για αυτόματη καταχώρηση:</p>
+        <p class="mt-2">Εναλλακτικά, προωθήστε τα τιμολόγιά σας (PDF) στην παρακάτω διεύθυνση για αυτόματη καταχώρηση:</p>
         <div class="mt-3 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
           <span class="min-w-0 flex-1 truncate pr-2 font-mono text-xs text-slate-600">{{ inboundEmailAddress }}</span>
           <button 
@@ -228,7 +248,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useUserStore } from '@/store/userStore';
 
@@ -285,6 +305,12 @@ const copyEmailAddress = async () => {
 const isMobile = ref(true);
 const showDraftSetup = ref(false);
 const draftExpectedPages = ref(1);
+const pageLimitWarning = ref<string | null>(null);
+
+// Drag & Drop State
+const isDraggingPdf = ref(false);
+const isDraggingImage = ref(false);
+const isDraggingDraft = ref(false);
 
 onMounted(() => {
   isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -293,19 +319,24 @@ onMounted(() => {
 // Refs for hidden inputs
 const pdfInput = ref<HTMLInputElement | null>(null);
 const imageInput = ref<HTMLInputElement | null>(null);
+const draftWorkspaceRef = ref<HTMLElement | null>(null);
 
 const triggerPdfPicker = () => {
   showDraftSetup.value = false;
+  pageLimitWarning.value = null;
   if (pdfInput.value) pdfInput.value.click();
 };
 
 const triggerImagePicker = () => {
+  pageLimitWarning.value = null;
   if (imageInput.value) imageInput.value.click();
 };
 
 const handlePdfSelection = (event: Event) => {
   const input = event.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
+  
+  pageLimitWarning.value = null;
   
   for (const file of files) {
     if (isPdf(file)) {
@@ -322,16 +353,32 @@ const confirmDraftSetup = () => {
     if (startImageDraft(pages)) {
       showDraftSetup.value = false;
       draftExpectedPages.value = 1;
+      pageLimitWarning.value = null;
+      
+      if (isMobile.value) {
+        nextTick(() => {
+          if (draftWorkspaceRef.value) {
+            draftWorkspaceRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+      }
     }
   }
+};
+
+const cancelDraftSetup = () => {
+  showDraftSetup.value = false;
+  pageLimitWarning.value = null;
 };
 
 const cancelDraft = () => {
   cancelImageDraft();
   showDraftSetup.value = false;
+  pageLimitWarning.value = null;
 };
 
 const handleImageSelection = async (file: File) => {
+  pageLimitWarning.value = null;
   await addImageToDraft(file);
 };
 
@@ -342,7 +389,10 @@ const handleGalleryImageSelection = async (event: Event) => {
   const remainingPages = draftInvoice.value ? draftInvoice.value.totalPages - draftInvoice.value.pages.length : 0;
   
   if (files.length > remainingPages) {
-    notifyError(`Επιλέξατε περισσότερες εικόνες από τις υπολειπόμενες σελίδες. Προστέθηκαν μόνο οι πρώτες ${remainingPages}.`);
+    const addedText = remainingPages === 1 ? 'Προστέθηκε μόνο η πρώτη 1' : `Προστέθηκαν μόνο οι πρώτες ${remainingPages}`;
+    pageLimitWarning.value = `Επιλέξατε περισσότερες εικόνες από τις υπολειπόμενες σελίδες. ${addedText}.`;
+  } else {
+    pageLimitWarning.value = null;
   }
   
   for (const file of files) {
@@ -356,7 +406,82 @@ const handleGalleryImageSelection = async (event: Event) => {
   input.value = '';
 };
 
+// Drag & Drop Handlers
+const handlePdfDrop = (event: DragEvent) => {
+  isDraggingPdf.value = false;
+  if (isMobile.value || !canAddMoreInvoices.value || isBusy.value) return;
+  
+  pageLimitWarning.value = null;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  for (const file of files) {
+    if (isPdf(file)) {
+      addPdfToBatch(file);
+    } else {
+      notifyError(`Το αρχείο ${file.name} δεν είναι PDF.`);
+    }
+  }
+};
+
+const handleImageDrop = async (event: DragEvent) => {
+  isDraggingImage.value = false;
+  if (isMobile.value || !canAddMoreInvoices.value || isBusy.value) return;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  const validFiles = files.filter(f => f.type.startsWith('image/'));
+  
+  if (files.length > 0 && validFiles.length === 0) {
+    notifyError('Παρακαλώ επιλέξτε μόνο αρχεία εικόνας.');
+    return;
+  }
+  if (files.length !== validFiles.length) {
+    notifyError('Κάποια αρχεία αγνοήθηκαν επειδή δεν είναι εικόνες.');
+  }
+
+  if (validFiles.length > 0) {
+    showDraftSetup.value = false;
+    pageLimitWarning.value = null;
+    // Automatically start a draft with the number of dropped images
+    if (startImageDraft(validFiles.length)) {
+      for (const file of validFiles) {
+        await addImageToDraft(file);
+      }
+    }
+  }
+};
+
+const handleDraftDrop = async (event: DragEvent) => {
+  isDraggingDraft.value = false;
+  if (isMobile.value || isBusy.value || !draftInvoice.value) return;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  const validFiles = files.filter(f => f.type.startsWith('image/'));
+  
+  if (files.length > 0 && validFiles.length === 0) {
+    notifyError('Παρακαλώ επιλέξτε μόνο αρχεία εικόνας.');
+    return;
+  }
+  
+  const remainingPages = draftInvoice.value.totalPages - draftInvoice.value.pages.length;
+  
+  if (validFiles.length > remainingPages) {
+    const addedText = remainingPages === 1 ? 'Προστέθηκε μόνο η πρώτη 1' : `Προστέθηκαν μόνο οι πρώτες ${remainingPages}`;
+    pageLimitWarning.value = `Σύρατε περισσότερες εικόνες από τις υπολειπόμενες σελίδες. ${addedText}.`;
+  } else {
+    pageLimitWarning.value = null;
+  }
+  
+  for (const file of validFiles) {
+    if (draftInvoice.value && draftInvoice.value.pages.length < draftInvoice.value.totalPages) {
+      await addImageToDraft(file);
+    } else {
+      break;
+    }
+  }
+};
+
 const startUpload = async () => {
+  pageLimitWarning.value = null;
   await upload();
 };
 
@@ -364,6 +489,12 @@ const resetAll = () => {
   resetQueue();
   showDraftSetup.value = false;
   draftExpectedPages.value = 1;
+  pageLimitWarning.value = null;
+};
+
+const handleRemoveInvoice = (id: string) => {
+  pageLimitWarning.value = null;
+  removeInvoice(id);
 };
 
 const isBusy = computed(() => ['validating', 'uploading'].includes(status.value));

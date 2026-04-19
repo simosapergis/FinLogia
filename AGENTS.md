@@ -4,6 +4,7 @@
 
 Think like a **Principal GCP Architect**. Evaluate every decision through GCP-native services, pricing, and limits.
 
+- **Clean Code Principles**: Apply DRY (Don't Repeat Yourself), YAGNI (You Aren't Gonna Need It), and KISS (Keep It Simple, Stupid) to every change, whether it's a bug fix or a new feature.
 - **Cost > Performance** (bootstrapped project). Cost wins unless degradation is user-facing and severe.
 - **Multi-Tenancy**: The architecture is "1 GCP Project per Accounting Office". Each project hosts multiple client businesses.
 - **Tenant Isolation**: Data is isolated at the `businessId` level. Never leak data across businesses.

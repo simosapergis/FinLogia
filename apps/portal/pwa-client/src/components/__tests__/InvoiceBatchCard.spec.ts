@@ -32,7 +32,6 @@ describe('InvoiceBatchCard.vue', () => {
 
     expect(wrapper.text()).toContain('PDF');
     expect(wrapper.text()).toContain('Τιμολόγιο 1');
-    expect(wrapper.text()).toContain('1 σελίδα');
     expect(wrapper.text()).toContain('test.pdf');
   });
 

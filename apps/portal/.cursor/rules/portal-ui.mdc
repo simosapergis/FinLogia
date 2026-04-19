@@ -27,7 +27,7 @@ Your primary focus is on building highly responsive, mobile-first interfaces tha
 - **Styling & Consistency:** Maintain strict consistency with the current app's design, look, and feel. Use existing styling tools (Tailwind CSS). NEVER introduce new styling libraries or UI frameworks without asking for permission first.
 - **Proactive Suggestions:** Feel free to suggest UX improvements or better coding approaches. If you think of a better way to implement a feature or improve the user experience, ASK and discuss it with the user before proceeding.
 - **API Communication:** Always use `apiRequest` to automatically inject the `businessId` in API calls.
-- **Performance:** Implement Cursor-based Pagination for unbounded lists to protect performance and GCP costs.
+- **Performance & UI Responsiveness:** We need to be keen about UI performance. Optimize rendering, avoid unnecessary reactivity overhead, lazy-load heavy components/routes, and keep the DOM lightweight to ensure a snappy user experience. Implement Cursor-based Pagination for unbounded lists to protect performance and GCP costs.
 - **Localization:** Ensure all user-facing strings are in **Greek**.
 - **Typography:** Do NOT use the em dash (—). Use standard hyphens (-) or other appropriate punctuation instead to maintain consistency.
 
