@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/simosapergis/FinLogia/compare/v1.2.0...v1.3.0) (2026-04-19)
+
+
+### Features
+
+* Support batch invoices upload (PDF, Images) ([14e81fe](https://github.com/simosapergis/FinLogia/commit/14e81feabf2db3bfda756ba540d6d3abeff0aa13))
+
 # [1.2.0](https://github.com/simosapergis/FinLogia/compare/v1.1.1...v1.2.0) (2026-04-15)
 
 
