@@ -1,156 +1,223 @@
 <template>
-  <section class="grid w-full gap-6 lg:grid-cols-[2fr,1fr]">
-    <div class="rounded-3xl bg-white p-6 shadow-lg">
-      <header class="mb-6 flex items-center justify-between">
+  <section class="grid w-full min-w-0 gap-6 lg:grid-cols-[2fr,1fr]">
+    <div class="min-w-0 rounded-3xl bg-white p-4 shadow-lg sm:p-6">
+      <header class="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="upload-title text-2xl font-semibold text-slate-900">Σάρωση Τιμολογίου</h2>
         </div>
         <StatusBadge :status="statusBadge" />
       </header>
 
-      <div class="grid gap-4">
-        <label class="text-sm font-medium text-slate-600">
-          Σύνολο σελίδων
+      <!-- Action Buttons (Hidden when drafting) -->
+      <div v-if="!draftInvoice" class="grid gap-4 sm:grid-cols-2">
+        <button
+          type="button"
+          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition disabled:cursor-not-allowed disabled:opacity-50"
+          :class="isDraggingPdf ? 'border-rose-500 bg-rose-100 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600'"
+          :disabled="!canAddMoreInvoices || isBusy"
+          @click="triggerPdfPicker"
+          @dragenter.prevent="!isMobile && (isDraggingPdf = true)"
+          @dragover.prevent="!isMobile && (isDraggingPdf = true)"
+          @dragleave.prevent="isDraggingPdf = false"
+          @drop.prevent="handlePdfDrop"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="pointer-events-none h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span class="pointer-events-none font-semibold">PDF</span>
+        </button>
+
+        <button
+          type="button"
+          class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition disabled:cursor-not-allowed disabled:opacity-50"
+          :class="isDraggingImage ? 'border-blue-500 bg-blue-100 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'"
+          :disabled="!canAddMoreInvoices || isBusy"
+          @click="showDraftSetup = true; pageLimitWarning = null"
+          @dragenter.prevent="!isMobile && (isDraggingImage = true)"
+          @dragover.prevent="!isMobile && (isDraggingImage = true)"
+          @dragleave.prevent="isDraggingImage = false"
+          @drop.prevent="handleImageDrop"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="pointer-events-none h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="pointer-events-none font-semibold">Φωτογραφίες</span>
+        </button>
+      </div>
+
+      <!-- PDF Hidden Input -->
+      <input
+        ref="pdfInput"
+        type="file"
+        accept="application/pdf"
+        multiple
+        class="hidden"
+        @change="handlePdfSelection"
+      />
+
+      <!-- Draft Setup Inline Form -->
+      <div v-if="showDraftSetup && !draftInvoice" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+        <h3 class="font-semibold text-slate-800">Νέο Τιμολόγιο από Εικόνες</h3>
+        <p class="mt-1 text-sm text-slate-600">Πόσες σελίδες έχει αυτό το τιμολόγιο;</p>
+        
+        <div class="mt-4 flex flex-wrap items-center gap-3">
           <input
             type="number"
             min="1"
-            class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-primary-500 focus:outline-none"
-            :value="totalPages ?? ''"
-            @input="handleTotalPagesInput"
+            v-model="draftExpectedPages"
+            class="w-24 rounded-xl border border-slate-300 px-4 py-2 focus:border-primary-500 focus:outline-none"
           />
-        </label>
-      </div>
-
-      <div class="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div>
-          <p class="text-sm font-semibold text-slate-700">Είναι ήδη εξοφλημένο;</p>
-          <p class="text-xs text-slate-500">Θα καταχωρηθεί αυτόματα ως πληρωμένο</p>
+          <button
+            type="button"
+            class="rounded-xl bg-primary-600 px-5 py-2 font-semibold text-white hover:bg-primary-700"
+            @click="confirmDraftSetup"
+          >
+            Συνέχεια
+          </button>
+          <button
+            type="button"
+            class="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+            @click="cancelDraftSetup"
+          >
+            Ακύρωση
+          </button>
         </div>
-        <label class="relative inline-flex cursor-pointer items-center">
-          <input type="checkbox" v-model="isPaid" class="peer sr-only" :disabled="isBusy" />
-          <div class="peer h-6 w-11 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-emerald-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 peer-disabled:cursor-not-allowed peer-disabled:opacity-60"></div>
-        </label>
       </div>
 
-      <p v-if="activeInvoiceId" class="mt-2 text-xs uppercase tracking-wide text-emerald-600">
-        Ενεργό ID τιμολογίου: {{ activeInvoiceId }}
-      </p>
+      <!-- Active Draft Workspace -->
+      <div 
+        v-if="draftInvoice" 
+        ref="draftWorkspaceRef"
+        class="mt-6 rounded-2xl border-2 p-5 shadow-sm transition-colors"
+        :class="isDraggingDraft ? 'border-primary-500 bg-primary-50' : 'border-slate-200 bg-white'"
+        @dragenter.prevent="!isMobile && (isDraggingDraft = true)"
+        @dragover.prevent="!isMobile && (isDraggingDraft = true)"
+        @dragleave.prevent="isDraggingDraft = false"
+        @drop.prevent="handleDraftDrop"
+      >
+        <div class="mb-4 flex items-center justify-between">
+          <div>
+            <h3 class="font-semibold text-slate-800">
+              {{ isMobile ? 'Λήψη Σελίδων' : 'Επιλογή Σελίδων' }}
+            </h3>
+            <p class="text-sm text-slate-500">
+              Σελίδα {{ draftInvoice.pages.length + 1 }} από {{ draftInvoice.totalPages }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="text-sm font-semibold text-rose-500 hover:text-rose-600"
+            @click="cancelDraft"
+          >
+            Ακύρωση
+          </button>
+        </div>
 
-      <div class="mt-6 space-y-3">
         <div class="flex flex-col gap-3">
-          <label class="flex items-center gap-2 text-sm font-semibold text-slate-600 sm:hidden">
-            <input
-              type="checkbox"
-              v-model="useGalleryMode"
-              class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-            />
-            Από γκαλερί
-          </label>
-          <div class="relative">
+          <div class="relative flex flex-col gap-3 sm:block">
             <CameraButton
-              v-if="!useGalleryMode"
-              :disabled="!canUseCamera"
-              @select="handleSelection"
+              v-if="isMobile"
+              :disabled="isBusy"
+              @select="handleImageSelection"
             >
-              {{ mainActionLabel }}
+              Λήψη Φωτογραφίας
             </CameraButton>
+            
             <button
-              v-else
               type="button"
-              class="w-full rounded-xl bg-primary-600 px-6 py-4 text-base font-semibold text-white shadow-lg shadow-primary-600/30 transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="!canUseGallery"
-              @click="triggerGalleryPicker"
+              class="w-full rounded-xl px-6 py-4 text-base font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+              :class="isMobile ? 'border-2 border-primary-600 bg-white text-primary-600 hover:bg-primary-50 active:bg-primary-100' : 'bg-primary-600 text-white shadow-lg shadow-primary-600/30 hover:bg-primary-700'"
+              :disabled="isBusy"
+              @click="triggerImagePicker"
             >
-              {{ mainActionLabel }}
+              Επιλογή Εικόνων
             </button>
           </div>
         </div>
-        <p class="text-sm text-slate-500">{{ remainingPagesMessage }}</p>
+
+        <!-- Image Hidden Input -->
+        <input
+          ref="imageInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/*"
+          multiple
+          class="hidden"
+          @change="handleGalleryImageSelection"
+        />
       </div>
 
-      <input
-        ref="galleryInput"
-        type="file"
-        accept="image/*,application/pdf"
-        multiple
-        class="hidden"
-        @change="handleGallerySelection"
-      />
-
-      <div v-if="pages.length" class="mt-6 rounded-2xl border border-slate-200">
-        <ul class="divide-y divide-slate-100">
-          <li v-for="page in pages" :key="page.id" class="flex items-center justify-between px-4 py-3">
-            <div>
-              <p class="text-sm font-semibold text-slate-800">
-                Σελίδα {{ page.pageNumber }} — {{ page.name }}
-              </p>
-              <p class="text-xs text-slate-400">
-                {{ page.result?.objectName ?? 'Εκκρεμεί μεταφόρτωση' }}
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <span
-                class="rounded-full px-3 py-1 text-xs font-semibold"
-                :class="pageStatusClasses(page.status)"
-              >
-                {{ formatPageStatus(page.status) }}
-              </span>
-              <button
-                v-if="page.status === 'pending'"
-                class="text-xs font-semibold text-rose-500 hover:text-rose-600"
-                type="button"
-                @click="removePage(page.id)"
-              >
-                Αφαίρεση
-              </button>
-            </div>
-          </li>
-        </ul>
+      <!-- Batch Invoice List -->
+      <div v-if="invoices.length > 0" class="mt-8">
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="font-semibold text-slate-800">Λίστα Μεταφόρτωσης ({{ invoices.length }}/{{ MAX_INVOICES }})</h3>
+        </div>
+        
+        <div class="grid gap-4">
+          <InvoiceBatchCard
+            v-for="(invoice, index) in invoices"
+            :key="invoice.id"
+            :invoice="invoice"
+            :index="index"
+            :warning="pageLimitWarning && index === invoices.length - 1 ? pageLimitWarning : null"
+            @remove="handleRemoveInvoice"
+            @update:isPaid="updateInvoiceIsPaid"
+          />
+        </div>
       </div>
 
-      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button
-          type="button"
-          class="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          :disabled="!hasPendingUploads || isBusy"
-          @click="startUpload"
-        >
-          {{ statusLabel }}
-        </button>
-        <button
-          type="button"
-          class="rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-          :disabled="isBusy"
-          @click="() => resetQueue()"
-        >
-          Επαναφορά
-        </button>
-        <p class="text-xs text-slate-500 sm:ml-auto">Πρόοδος: {{ overallProgress }}%</p>
+      <!-- Global Actions -->
+      <div class="mt-8 border-t border-slate-100 pt-6">
+        <div v-if="invoices.length > 0" class="mb-4 text-sm font-medium text-slate-500">
+          Συνολική Πρόοδος: {{ overallProgress }}%
+        </div>
+        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-stretch">
+          <button
+            type="button"
+            class="flex flex-1 items-center justify-center whitespace-nowrap rounded-xl border border-slate-300 px-6 py-4 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isBusy"
+            @click="resetAll"
+          >
+            Επαναφορά
+          </button>
+          <button
+            type="button"
+            class="flex flex-[2] items-center justify-center rounded-xl bg-slate-900 px-6 py-4 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="!hasPendingUploads || isBusy || !!draftInvoice"
+            @click="startUpload"
+          >
+            <span class="text-center">{{ statusLabel }}</span>
+          </button>
+        </div>
       </div>
 
       <Loader v-if="isBusy" :label="statusMessage" />
-      <p v-if="error" class="mt-2 text-sm text-rose-500">{{ error }}</p>
+      <p v-if="error" class="mt-4 text-sm text-rose-500">{{ error }}</p>
+      <p v-if="!canAddMoreInvoices" class="mt-2 text-sm font-medium text-amber-600">
+        Έχετε φτάσει το μέγιστο όριο των {{ MAX_INVOICES }} τιμολογίων.
+      </p>
     </div>
 
-    <div class="space-y-4">
+    <!-- Sidebar -->
+    <div class="min-w-0 space-y-4">
       <div class="rounded-3xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
-        <p class="font-semibold text-slate-700">Βήματα Σάρωσης</p>
+        <p class="font-semibold text-slate-700">Βήματα Μαζικής Μεταφόρτωσης</p>
         <ol class="mt-2 list-decimal space-y-1 pl-5">
-          <li>Καταχώρηση συνολικού αριθμού σελίδων.</li>
-          <li>Λήψη σελίδας.</li>
-          <li>Μεταφόρτωση σελίδας.</li>
-          <li>Επανάληψη για τις υπόλοιπες σελίδες (αν υπάρχουν).</li>
+          <li>Επιλέξτε "Προσθήκη PDF" για έτοιμα αρχεία.</li>
+          <li>Επιλέξτε "Σάρωση" για να φωτογραφίσετε νέα τιμολόγια.</li>
+          <li>Ορίστε αν κάποιο τιμολόγιο είναι εξοφλημένο.</li>
+          <li>Πατήστε "Μαζική Μεταφόρτωση" για αποστολή.</li>
         </ol>
       </div>
 
       <div v-if="inboundEmailAddress" class="rounded-3xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
         <p class="font-semibold text-slate-700">Αποστολή μέσω Email</p>
-        <p class="mt-2">Προωθήστε τα τιμολόγιά σας (σε μορφή PDF) στην παρακάτω διεύθυνση για αυτόματη καταχώρηση:</p>
-        <div class="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-3 border border-slate-100">
-          <span class="truncate pr-2 font-mono text-xs text-slate-600">{{ inboundEmailAddress }}</span>
+        <p class="mt-2">Εναλλακτικά, προωθήστε τα τιμολόγιά σας (PDF) στην παρακάτω διεύθυνση για αυτόματη καταχώρηση:</p>
+        <div class="mt-3 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
+          <span class="min-w-0 flex-1 truncate pr-2 font-mono text-xs text-slate-600">{{ inboundEmailAddress }}</span>
           <button 
             @click="copyEmailAddress" 
-            class="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-primary-600 shadow-sm border border-slate-200 hover:bg-slate-50"
+            class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-primary-600 shadow-sm hover:bg-slate-50"
           >
             Αντιγραφή
           </button>
@@ -181,36 +248,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useUserStore } from '@/store/userStore';
 
 import CameraButton from '@/components/CameraButton.vue';
 import Loader from '@/components/Loader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
+import InvoiceBatchCard from '@/components/InvoiceBatchCard.vue';
 import { useInvoiceUpload } from '@/composables/useInvoiceUpload';
 import { useNotifications } from '@/composables/useNotifications';
 
 const { notifySuccess, notifyError } = useNotifications();
 
 const {
-  addPage,
-  upload,
-  removePage,
-  resetQueue,
-  setTotalPages,
-  isPdf,
   status,
   error,
-  totalPages,
-  activeInvoiceId,
-  isPaid,
-  pages,
+  invoices,
+  draftInvoice,
   uploadsLog,
-  canAddPages,
-  remainingPages,
-  overallProgress,
+  canAddMoreInvoices,
   hasPendingUploads,
+  overallProgress,
+  isPdf,
+  startImageDraft,
+  cancelImageDraft,
+  addPdfToBatch,
+  addImageToDraft,
+  removeInvoice,
+  updateInvoiceIsPaid,
+  upload,
+  resetQueue,
+  MAX_INVOICES,
 } = useInvoiceUpload();
 
 const userStore = useUserStore();
@@ -232,61 +301,203 @@ const copyEmailAddress = async () => {
   }
 };
 
-const galleryInput = ref<HTMLInputElement | null>(null);
-const useGalleryMode = ref(false);
+// UI State
+const isMobile = ref(true);
+const showDraftSetup = ref(false);
+const draftExpectedPages = ref(1);
+const pageLimitWarning = ref<string | null>(null);
 
-const handleGallerySelection = async (event: Event) => {
+// Drag & Drop State
+const isDraggingPdf = ref(false);
+const isDraggingImage = ref(false);
+const isDraggingDraft = ref(false);
+
+onMounted(() => {
+  isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+});
+
+// Refs for hidden inputs
+const pdfInput = ref<HTMLInputElement | null>(null);
+const imageInput = ref<HTMLInputElement | null>(null);
+const draftWorkspaceRef = ref<HTMLElement | null>(null);
+
+const triggerPdfPicker = () => {
+  showDraftSetup.value = false;
+  pageLimitWarning.value = null;
+  if (pdfInput.value) pdfInput.value.click();
+};
+
+const triggerImagePicker = () => {
+  pageLimitWarning.value = null;
+  if (imageInput.value) imageInput.value.click();
+};
+
+const handlePdfSelection = (event: Event) => {
   const input = event.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
-  if (!files.length) return;
-
-  const pdfFile = files.find((f) => isPdf(f));
-
-  if (pdfFile) {
-    resetQueue({ keepSettings: true });
-    setTotalPages(1);
-    await addPage(pdfFile);
-  } else {
-    for (const file of files) {
-      await addPage(file);
+  
+  pageLimitWarning.value = null;
+  
+  for (const file of files) {
+    if (isPdf(file)) {
+      addPdfToBatch(file);
     }
   }
-
+  
   input.value = '';
 };
 
-const triggerGalleryPicker = () => {
-  if (!galleryInput.value || !canUseGallery.value) return;
-  galleryInput.value.click();
+const confirmDraftSetup = () => {
+  const pages = Number(draftExpectedPages.value);
+  if (pages > 0) {
+    if (startImageDraft(pages)) {
+      showDraftSetup.value = false;
+      draftExpectedPages.value = 1;
+      pageLimitWarning.value = null;
+      
+      if (isMobile.value) {
+        nextTick(() => {
+          if (draftWorkspaceRef.value) {
+            draftWorkspaceRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+      }
+    }
+  }
 };
 
-const handleSelection = async (file: File) => {
-  if (isPdf(file)) {
-    resetQueue({ keepSettings: true });
-    setTotalPages(1);
+const cancelDraftSetup = () => {
+  showDraftSetup.value = false;
+  pageLimitWarning.value = null;
+};
+
+const cancelDraft = () => {
+  cancelImageDraft();
+  showDraftSetup.value = false;
+  pageLimitWarning.value = null;
+};
+
+const handleImageSelection = async (file: File) => {
+  pageLimitWarning.value = null;
+  await addImageToDraft(file);
+};
+
+const handleGalleryImageSelection = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = input.files ? Array.from(input.files) : [];
+  
+  const remainingPages = draftInvoice.value ? draftInvoice.value.totalPages - draftInvoice.value.pages.length : 0;
+  
+  if (files.length > remainingPages) {
+    const addedText = remainingPages === 1 ? 'Προστέθηκε μόνο η πρώτη 1' : `Προστέθηκαν μόνο οι πρώτες ${remainingPages}`;
+    pageLimitWarning.value = `Επιλέξατε περισσότερες εικόνες από τις υπολειπόμενες σελίδες. ${addedText}.`;
+  } else {
+    pageLimitWarning.value = null;
   }
-  await addPage(file);
+  
+  for (const file of files) {
+    if (draftInvoice.value && draftInvoice.value.pages.length < draftInvoice.value.totalPages) {
+      await addImageToDraft(file);
+    } else {
+      break;
+    }
+  }
+  
+  input.value = '';
+};
+
+// Drag & Drop Handlers
+const handlePdfDrop = (event: DragEvent) => {
+  isDraggingPdf.value = false;
+  if (isMobile.value || !canAddMoreInvoices.value || isBusy.value) return;
+  
+  pageLimitWarning.value = null;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  for (const file of files) {
+    if (isPdf(file)) {
+      addPdfToBatch(file);
+    } else {
+      notifyError(`Το αρχείο ${file.name} δεν είναι PDF.`);
+    }
+  }
+};
+
+const handleImageDrop = async (event: DragEvent) => {
+  isDraggingImage.value = false;
+  if (isMobile.value || !canAddMoreInvoices.value || isBusy.value) return;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  const validFiles = files.filter(f => f.type.startsWith('image/'));
+  
+  if (files.length > 0 && validFiles.length === 0) {
+    notifyError('Παρακαλώ επιλέξτε μόνο αρχεία εικόνας.');
+    return;
+  }
+  if (files.length !== validFiles.length) {
+    notifyError('Κάποια αρχεία αγνοήθηκαν επειδή δεν είναι εικόνες.');
+  }
+
+  if (validFiles.length > 0) {
+    showDraftSetup.value = false;
+    pageLimitWarning.value = null;
+    // Automatically start a draft with the number of dropped images
+    if (startImageDraft(validFiles.length)) {
+      for (const file of validFiles) {
+        await addImageToDraft(file);
+      }
+    }
+  }
+};
+
+const handleDraftDrop = async (event: DragEvent) => {
+  isDraggingDraft.value = false;
+  if (isMobile.value || isBusy.value || !draftInvoice.value) return;
+  
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : [];
+  const validFiles = files.filter(f => f.type.startsWith('image/'));
+  
+  if (files.length > 0 && validFiles.length === 0) {
+    notifyError('Παρακαλώ επιλέξτε μόνο αρχεία εικόνας.');
+    return;
+  }
+  
+  const remainingPages = draftInvoice.value.totalPages - draftInvoice.value.pages.length;
+  
+  if (validFiles.length > remainingPages) {
+    const addedText = remainingPages === 1 ? 'Προστέθηκε μόνο η πρώτη 1' : `Προστέθηκαν μόνο οι πρώτες ${remainingPages}`;
+    pageLimitWarning.value = `Σύρατε περισσότερες εικόνες από τις υπολειπόμενες σελίδες. ${addedText}.`;
+  } else {
+    pageLimitWarning.value = null;
+  }
+  
+  for (const file of validFiles) {
+    if (draftInvoice.value && draftInvoice.value.pages.length < draftInvoice.value.totalPages) {
+      await addImageToDraft(file);
+    } else {
+      break;
+    }
+  }
 };
 
 const startUpload = async () => {
+  pageLimitWarning.value = null;
   await upload();
 };
 
-const handleTotalPagesInput = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const value = Number.isNaN(input.valueAsNumber) ? null : input.valueAsNumber;
-  setTotalPages(value);
+const resetAll = () => {
+  resetQueue();
+  showDraftSetup.value = false;
+  draftExpectedPages.value = 1;
+  pageLimitWarning.value = null;
+};
+
+const handleRemoveInvoice = (id: string) => {
+  pageLimitWarning.value = null;
+  removeInvoice(id);
 };
 
 const isBusy = computed(() => ['validating', 'uploading'].includes(status.value));
-const canUseGallery = computed(() => (canAddPages.value || !totalPages.value) && !isBusy.value);
-const canUseCamera = computed(() => (canAddPages.value || !totalPages.value) && !isBusy.value && !useGalleryMode.value);
-const mainActionLabel = computed(() => {
-  if (!canAddPages.value && totalPages.value) {
-    return 'Όλες οι σελίδες καταγράφηκαν';
-  }
-  return 'Επιλογή εικόνας ή PDF';
-});
 
 const statusBadge = computed(() => {
   switch (status.value) {
@@ -304,7 +515,7 @@ const statusBadge = computed(() => {
 const statusLabel = computed(() => {
   if (status.value === 'uploading') return 'Μεταφόρτωση...';
   if (status.value === 'validating') return 'Επικύρωση...';
-  return 'Μεταφόρτωση εκκρεμών σελίδων';
+  return 'Μεταφόρτωση Όλων';
 });
 
 const statusMessage = computed(() => {
@@ -312,51 +523,15 @@ const statusMessage = computed(() => {
     case 'validating':
       return 'Έλεγχος ευκρίνειας και προσανατολισμού...';
     case 'uploading':
-      return 'Μεταφόρτωση σελίδας στο υπογεγραμμένο URL...';
+      return 'Μεταφόρτωση τιμολογίων...';
     case 'completed':
-      return 'Όλες οι σελίδες μεταφορτώθηκαν. Αναμονή επεξεργασίας.';
+      return 'Όλα τα τιμολόγια μεταφορτώθηκαν. Αναμονή επεξεργασίας.';
     case 'error':
       return 'Κάτι πήγε στραβά. Διορθώστε το πρόβλημα και δοκιμάστε ξανά.';
     default:
-      return 'Καταγράψτε σελίδες και ανεβάστε τις καθώς προχωράτε.';
+      return 'Προσθέστε τιμολόγια στη λίστα.';
   }
 });
-
-const remainingPagesMessage = computed(() => {
-  if (!totalPages.value) return 'Ορίστε τον συνολικό αριθμό σελίδων για να ξεκινήσετε.';
-  if (remainingPages.value <= 0) return 'Όλες οι σελίδες καταγράφηκαν. Μεταφορτώστε για ολοκλήρωση.';
-  return `Απομένουν ${remainingPages.value} σελίδ${remainingPages.value > 1 ? 'ες' : 'α'} για λήψη.`;
-});
-
-const pageStatusClasses = (pageStatus: string) => {
-  switch (pageStatus) {
-    case 'uploaded':
-      return 'bg-emerald-100 text-emerald-700';
-    case 'uploading':
-      return 'bg-sky-100 text-sky-700';
-    case 'validating':
-      return 'bg-amber-100 text-amber-700';
-    case 'error':
-      return 'bg-rose-100 text-rose-700';
-    default:
-      return 'bg-slate-100 text-slate-600';
-  }
-};
-
-const formatPageStatus = (pageStatus: string) => {
-  switch (pageStatus) {
-    case 'uploaded':
-      return 'Ολοκληρώθηκε';
-    case 'uploading':
-      return 'Μεταφόρτωση';
-    case 'validating':
-      return 'Επικύρωση';
-    case 'error':
-      return 'Σφάλμα';
-    default:
-      return 'Εκκρεμεί';
-  }
-};
 </script>
 
 <style scoped>

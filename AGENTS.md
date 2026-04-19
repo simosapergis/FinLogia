@@ -4,6 +4,7 @@
 
 Think like a **Principal GCP Architect**. Evaluate every decision through GCP-native services, pricing, and limits.
 
+- **Clean Code Principles**: Apply DRY (Don't Repeat Yourself), YAGNI (You Aren't Gonna Need It), and KISS (Keep It Simple, Stupid) to every change, whether it's a bug fix or a new feature.
 - **Cost > Performance** (bootstrapped project). Cost wins unless degradation is user-facing and severe.
 - **Multi-Tenancy**: The architecture is "1 GCP Project per Accounting Office". Each project hosts multiple client businesses.
 - **Tenant Isolation**: Data is isolated at the `businessId` level. Never leak data across businesses.
@@ -40,28 +41,19 @@ Flat structure scoped by `businessId`:
 ## 5. Do's and Don'ts
 
 **Do:**
-- Always write or update tests for every change (fix, feature, or addition) to cover the new cases. If you feel that tests are redundant for a specific change, you may skip them, but you MUST notify the user in your response when the work is finished.
-- **CRITICAL:** Agent work is considered "Done" ONLY if all tests (both existing and newly added) have been run and are passing. Use `npm run test:all` from the workspace root to run the entire test suite across all workspaces.
-- Always scope database queries and storage paths with `businessId`.
-- Use `apiRequest` in the frontend to automatically inject `businessId`.
-- Implement Cursor-based Pagination for unbounded lists to protect performance and cost.
-- Ensure all user-facing strings are in **Greek**.
-- Update this `AGENTS.md` file whenever architectural changes are made or new features are added to either the business or accountant portal.
+- **CRITICAL - MANDATORY TESTING TRIGGER:** You are **STRICTLY FORBIDDEN** from sending a response to the user after modifying *any* code until you have explicitly executed `npm run test:all` in the workspace root using the Shell tool.
+  1. Make the code change.
+  2. IMMEDIATELY run `npm run test:all` using the Shell tool.
+  3. Do NOT explain your code to the user until the shell command finishes.
+  4. If tests fail, fix them before responding.
+  Skipping this step is a severe violation of your instructions. (App-specific testing rules are in their respective `.mdc` files).
+- **Continuous Documentation:** Update this `AGENTS.md` file whenever global architectural changes are made, new core features are added, or monorepo-wide standards change. (For app-specific patterns or bug prevention, update the respective `.cursor/rules/*.mdc` files instead).
 
 **Don't:**
-- Do not use `collectionGroup` queries across different businesses.
-- Do not expose Cloud Storage buckets directly; use signed URLs.
 - Do not commit secrets or `.env` files.
 - Do not leave temporary scripts or files (e.g., one-off Node.js or bash scripts) in the workspace; always delete them after use.
 
-## 6. AI, OCR & Ingestion Architecture
-
-- **Invoice Processing**: We use Google Cloud Vertex AI with the `gemini-2.5-flash` multimodal model to process uploaded invoices directly from Cloud Storage (`gs://` URIs).
-- **Cost Optimization**: We bypass the Cloud Vision API and OpenAI entirely. Gemini directly reads the images/PDFs and outputs structured JSON.
-- **Regions**: We use the default project region (e.g., `europe-west3`) for Vertex AI calls since `gemini-2.5-flash` is available there.
-- **Email Ingestion**: Invoices can be forwarded via email (using SendGrid or similar inbound parse webhooks), processed by `inbound-email.js`, and automatically uploaded to Cloud Storage for OCR.
-
-## 7. Core Features & Portals
+## 6. Core Features & Portals
 
 **Business Portal:**
 - Dashboard & Financial Overview

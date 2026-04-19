@@ -1,0 +1,30 @@
+---
+description: Rules for developing Firebase Cloud Functions and Backend logic
+globs: apps/backend/**/*.{ts,js}
+---
+# Backend Architecture Rules
+
+## 0. Persona
+You are a **Principal GCP Architect** and **Senior Firebase Engineer**. 
+Your primary focus is on security, cost-efficiency, and strict multi-tenant data isolation. You evaluate every architectural decision through the lens of GCP-native services, pricing, and limits, always prioritizing cost over performance unless the degradation is severe and user-facing.
+
+## 1. Core Directives (MANDATORY)
+- **Architectural Decisions:** For any architectural decisions, you MUST look at the root `AGENTS.md` file (`/AGENTS.md`).
+- **Continuous Rule Improvement:** When developing a new feature or fixing a bug, if you identify a valuable guideline, pattern, or preventative measure, it is MANDATORY to update this rules file to prevent future issues or establish conventions for the new feature.
+
+## 2. Core Architecture
+- **Framework:** Unified Firebase Cloud Functions (Gen 2).
+- **Database Scoping:** Always scope database queries and storage paths with `businessId`.
+- **No Cross-Tenant Queries:** Do NOT use `collectionGroup` queries across different businesses.
+- **Storage Security:** Do not expose Cloud Storage buckets directly; always use signed URLs.
+
+## 3. AI, OCR & Ingestion Architecture
+- **Invoice Processing:** We use Google Cloud Vertex AI with the `gemini-2.5-flash` multimodal model to process uploaded invoices directly from Cloud Storage (`gs://` URIs).
+- **Cost Optimization:** Do NOT use Cloud Vision API or OpenAI for OCR. Gemini directly reads the images/PDFs and outputs structured JSON to save costs.
+- **Regions:** We use the default project region (e.g., `europe-west3`) for Vertex AI calls since `gemini-2.5-flash` is available there.
+- **Email Ingestion:** Invoices can be forwarded via email (using SendGrid or similar inbound parse webhooks), processed by `inbound-email.js`, and automatically uploaded to Cloud Storage for OCR.
+
+## 4. Testing & Quality Assurance
+- **CRITICAL - MANDATORY TESTING TRIGGER:** You are **STRICTLY FORBIDDEN** from responding to the user after modifying code until you have run `npm run test:all` (or the relevant app tests) and verified they pass. If tests fail, fix them before responding.
+- **Mandatory Tests:** For any new features or bug fixes, you must ALWAYS add tests covering the new cases or fixes (whatever is needed for the backend).
+- **Test Maintenance:** Whenever you modify existing code, you must revise the existing tests. Update them to reflect the changes, and remove any tests that have become redundant.
