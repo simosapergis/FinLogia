@@ -37,6 +37,11 @@ Flat structure scoped by `businessId`:
 
 - **CI/CD**: GitHub Actions Matrix strategy deploys to all Accounting Office GCP projects in parallel.
 - **Provisioning**: Scripts in `apps/backend/scripts/` handle creating new offices and onboarding client businesses.
+- **Versioning (Semantic Release)**: We use Angular Commit Convention to automate versioning and releases:
+  - **Major (x.0.0)**: `BREAKING CHANGE:` in footer or `type!:` (e.g., `feat!: new API`)
+  - **Minor (0.x.0)**: `feat:` (e.g., `feat: add portal`)
+  - **Patch (0.0.x)**: `fix:`, `perf:` (e.g., `fix: resolve crash`)
+  - **No Release**: `chore:`, `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`
 
 ## 5. Do's and Don'ts
 
