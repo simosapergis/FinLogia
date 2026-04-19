@@ -25,6 +25,6 @@ Your primary focus is on security, cost-efficiency, and strict multi-tenant data
 - **Email Ingestion:** Invoices can be forwarded via email (using SendGrid or similar inbound parse webhooks), processed by `inbound-email.js`, and automatically uploaded to Cloud Storage for OCR.
 
 ## 4. Testing & Quality Assurance
-- **Definition of Done:** Your job is ONLY considered done when all tests are passing.
+- **CRITICAL - MANDATORY TESTING TRIGGER:** You are **STRICTLY FORBIDDEN** from responding to the user after modifying code until you have run `npm run test:all` (or the relevant app tests) and verified they pass. If tests fail, fix them before responding.
 - **Mandatory Tests:** For any new features or bug fixes, you must ALWAYS add tests covering the new cases or fixes (whatever is needed for the backend).
 - **Test Maintenance:** Whenever you modify existing code, you must revise the existing tests. Update them to reflect the changes, and remove any tests that have become redundant.

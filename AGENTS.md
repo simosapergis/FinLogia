@@ -41,7 +41,12 @@ Flat structure scoped by `businessId`:
 ## 5. Do's and Don'ts
 
 **Do:**
-- **Monorepo Testing:** Before considering any task complete, you must verify nothing broke across the monorepo by running `npm run test:all` from the workspace root. (App-specific testing rules are in their respective `.mdc` files).
+- **CRITICAL - MANDATORY TESTING TRIGGER:** You are **STRICTLY FORBIDDEN** from sending a response to the user after modifying *any* code until you have explicitly executed `npm run test:all` in the workspace root using the Shell tool.
+  1. Make the code change.
+  2. IMMEDIATELY run `npm run test:all` using the Shell tool.
+  3. Do NOT explain your code to the user until the shell command finishes.
+  4. If tests fail, fix them before responding.
+  Skipping this step is a severe violation of your instructions. (App-specific testing rules are in their respective `.mdc` files).
 - **Continuous Documentation:** Update this `AGENTS.md` file whenever global architectural changes are made, new core features are added, or monorepo-wide standards change. (For app-specific patterns or bug prevention, update the respective `.cursor/rules/*.mdc` files instead).
 
 **Don't:**
