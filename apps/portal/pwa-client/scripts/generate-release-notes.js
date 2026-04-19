@@ -26,7 +26,7 @@ export async function generateReleaseNotes(changelogPath = CHANGELOG_PATH, relea
     // Assuming semantic-release format:
     // ## [1.1.1](...) (2026-04-15) or # [1.1.0](...) (2026-04-15)
     // Followed by commits until the next header
-    const versionRegex = /#+ \[?(\d+\.\d+\.\d+)\]?.*?\(([^)]+)\)/g;
+    const versionRegex = /#+ \[?(\d+\.\d+\.\d+)\]?.*?\(([\d]{4}-[\d]{2}-[\d]{2})\)/g;
     let match = versionRegex.exec(changelogContent);
     
     if (!match) {
