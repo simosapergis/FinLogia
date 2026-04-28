@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/simosapergis/FinLogia/compare/v1.3.0...v1.3.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* new predefined date ranges ([#12](https://github.com/simosapergis/FinLogia/issues/12)) ([4407c7d](https://github.com/simosapergis/FinLogia/commit/4407c7d98af533733153d73852905858538aa23b))
+
 # [1.3.0](https://github.com/simosapergis/FinLogia/compare/v1.2.0...v1.3.0) (2026-04-19)
 
 
