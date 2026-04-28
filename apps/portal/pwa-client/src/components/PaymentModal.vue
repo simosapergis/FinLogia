@@ -151,6 +151,7 @@
                         :max="maxCreditAmount"
                         class="w-full rounded-xl border-2 border-indigo-200 bg-white pl-8 pr-3 py-2 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         :class="{ 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/20': creditAmountError }"
+                        @blur="creditAmountUsed = roundAmount(creditAmountUsed)"
                       />
                     </div>
                     <p v-if="creditAmountError" class="mt-1.5 text-xs font-medium text-rose-500">{{ creditAmountError }}</p>
@@ -189,6 +190,7 @@
                       placeholder="0.00"
                       class="h-14 w-full rounded-xl border-2 border-slate-200 bg-white pl-9 pr-4 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/20"
                       :class="{ 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/20': amountError }"
+                      @blur="amount = roundAmount(amount)"
                     />
                   </div>
                   <!-- Full payment button -->
@@ -235,6 +237,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { formatCurrency } from '@/utils/date';
+import { roundAmount } from '@/utils/number';
 
 import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 
@@ -285,7 +288,7 @@ const selectedCreditInvoice = computed(() => {
 
 const maxCreditAmount = computed(() => {
   if (!selectedCreditInvoice.value) return 0;
-  return Math.min(props.totalAmount, selectedCreditInvoice.value.unpaidAmount ?? 0);
+  return roundAmount(Math.min(props.totalAmount, selectedCreditInvoice.value.unpaidAmount ?? 0)) ?? 0;
 });
 
 watch(selectedCreditId, (newId) => {
@@ -305,7 +308,7 @@ const creditAmountError = computed(() => {
 
 const remainingAmountToPay = computed(() => {
   const credit = (useCredit.value && creditAmountUsed.value) ? creditAmountUsed.value : 0;
-  return Math.max(0, props.totalAmount - credit);
+  return roundAmount(Math.max(0, props.totalAmount - credit)) ?? 0;
 });
 
 const amountError = computed(() => {
@@ -330,7 +333,7 @@ const isValid = computed(() => {
 });
 
 const fillTotalAmount = () => {
-  amount.value = remainingAmountToPay.value;
+  amount.value = roundAmount(remainingAmountToPay.value);
 };
 
 const handleSubmit = () => {

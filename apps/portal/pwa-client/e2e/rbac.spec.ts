@@ -49,8 +49,8 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     await page.goto('/accountant/clients/clientA/invoices');
     await expect(page).toHaveURL(/.*\/accountant\/clients\/clientA\/invoices/);
 
-    // Select "Μήνας" (Month) and click search
-    await page.click('text=Μήνας');
+    // Select "Σήμερα" (Today) and click search
+    await page.click('text=Σήμερα');
     await page.click('button:has-text("Αναζήτηση Τιμολογίων")');
 
     // 4. Verify Client A's invoice is on the page
@@ -65,8 +65,8 @@ test.describe('Role-Based Access Control (RBAC)', () => {
     await page.goto('/accountant/clients/clientB/invoices');
     await expect(page).toHaveURL(/.*\/accountant\/clients\/clientB\/invoices/);
 
-    // Select "Μήνας" (Month) and click search
-    await page.click('text=Μήνας');
+    // Select "Σήμερα" (Today) and click search
+    await page.click('text=Σήμερα');
     await page.click('button:has-text("Αναζήτηση Τιμολογίων")');
 
     // 7. Verify Client B's invoice is on the page and Client A's data is NOT visible

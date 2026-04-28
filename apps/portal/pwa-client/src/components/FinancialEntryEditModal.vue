@@ -70,6 +70,7 @@
                     step="0.01"
                     min="0"
                     class="w-full rounded-lg border border-slate-300 px-3 py-2 pr-10 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
+                    @blur="form.amount = roundAmount(form.amount) ?? 0"
                   />
                   <span class="absolute right-3 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">€</span>
                 </div>
@@ -148,6 +149,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { Check, Loader2, X } from 'lucide-vue-next';
+import { roundAmount } from '@/utils/number';
 
 import {
   editFinancialEntry,
@@ -214,7 +216,7 @@ watch(
   (open) => {
     if (open && props.entry) {
       form.category = props.entry.category;
-      form.amount = props.entry.amount;
+      form.amount = roundAmount(props.entry.amount) ?? 0;
       form.date = toDateInputValue(props.entry.date);
       form.description = props.entry.description ?? '';
       errorMessage.value = null;

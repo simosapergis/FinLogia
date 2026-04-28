@@ -65,6 +65,7 @@
             min="0"
             placeholder="0.00"
             class="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-12 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-500/10"
+            @blur="expenseAmount = roundAmount(expenseAmount)"
           />
           <span class="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">€</span>
         </div>
@@ -326,6 +327,7 @@
                 min="0"
                 placeholder="0.00"
                 class="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-12 text-slate-900 transition focus:border-primary-500 focus:outline-none"
+                @blur="recurringAmount = roundAmount(recurringAmount)"
               />
               <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">€</span>
             </div>
@@ -433,6 +435,7 @@ import {
   type RecurringExpense,
 } from '@/services/api/financialApi';
 import { formatCurrency } from '@/utils/date';
+import { roundAmount } from '@/utils/number';
 import { QUICK_PERIODS, getDateRangeForPeriod } from '@/composables/useQuickPeriods';
 
 const { notifySuccess, notifyError } = useNotifications();
