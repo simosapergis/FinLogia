@@ -200,6 +200,7 @@
                       min="0"
                       class="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-3 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="0.00"
+                      @blur="editForm.totalAmount = roundAmount(editForm.totalAmount)"
                     />
                   </div>
                   <span v-else class="text-lg font-semibold text-slate-900">
@@ -221,6 +222,7 @@
                       min="0"
                       class="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-3 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="0.00"
+                      @blur="editForm.netAmount = roundAmount(editForm.netAmount)"
                     />
                   </div>
                   <span v-else class="text-lg font-semibold text-slate-900">
@@ -242,6 +244,7 @@
                       min="0"
                       class="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-3 text-lg font-semibold text-slate-900 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="0.00"
+                      @blur="editForm.vatAmount = roundAmount(editForm.vatAmount)"
                     />
                   </div>
                   <span v-else class="text-lg font-semibold text-slate-900">
@@ -277,6 +280,7 @@
                       min="0"
                       class="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-3 text-lg font-semibold text-emerald-600 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="0.00"
+                      @blur="editForm.paidAmount = roundAmount(editForm.paidAmount)"
                     />
                   </div>
                   <div v-else>
@@ -409,6 +413,7 @@ import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
 import { updateInvoiceFields } from '@/services/api/updateInvoiceFields';
 import { formatCurrency, formatDateTime, formatDate } from '@/utils/date';
+import { roundAmount } from '@/utils/number';
 import { useNotifications } from '@/composables/useNotifications';
 
 const props = defineProps<{
@@ -484,13 +489,13 @@ const initializeEditForm = () => {
     supplierTaxNumber: props.invoice.supplierTaxNumber ?? '',
     invoiceNumber: props.invoice.invoiceNumber ?? '',
     invoiceDate: toDateInputValue(props.invoice.invoiceDate),
-    totalAmount: props.invoice.totalAmount ?? null,
-    netAmount: props.invoice.netAmount ?? null,
-    vatAmount: props.invoice.vatAmount ?? null,
-    paidAmount: props.invoice.paidAmount ?? 0,
+    totalAmount: roundAmount(props.invoice.totalAmount) ?? null,
+    netAmount: roundAmount(props.invoice.netAmount) ?? null,
+    vatAmount: roundAmount(props.invoice.vatAmount) ?? null,
+    paidAmount: roundAmount(props.invoice.paidAmount) ?? 0,
     isCredit: props.invoice.isCredit ?? false,
     paymentHistory: (props.invoice.paymentHistory || []).map((entry) => ({
-      amount: entry.amount,
+      amount: roundAmount(entry.amount) ?? 0,
       paymentDate: toDateInputValue(entry.paymentDate),
       notes: entry.notes,
     })),

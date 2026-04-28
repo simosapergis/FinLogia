@@ -65,6 +65,7 @@
               min="0"
               placeholder="0.00"
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
+              @blur="cashAmount = roundAmount(cashAmount)"
             />
           </div>
           <span class="text-lg font-medium text-slate-400">€</span>
@@ -83,6 +84,7 @@
               min="0"
               placeholder="0.00"
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
+              @blur="cardAmount = roundAmount(cardAmount)"
             />
           </div>
           <span class="text-lg font-medium text-slate-400">€</span>
@@ -101,6 +103,7 @@
               min="0"
               placeholder="0.00"
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-lg font-semibold text-slate-900 focus:border-primary-500 focus:ring-primary-500"
+              @blur="otherAmount = roundAmount(otherAmount)"
             />
           </div>
           <span class="text-lg font-medium text-slate-400">€</span>
@@ -356,6 +359,7 @@ import {
   type IncomeCategory,
 } from '@/services/api/financialApi';
 import { formatCurrency } from '@/utils/date';
+import { roundAmount } from '@/utils/number';
 import { QUICK_PERIODS, getDateRangeForPeriod } from '@/composables/useQuickPeriods';
 
 const { notifySuccess, notifyError } = useNotifications();
