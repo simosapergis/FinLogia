@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/simosapergis/FinLogia/compare/v1.3.1...v1.3.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* use current month & current year in quick filters on search ([#13](https://github.com/simosapergis/FinLogia/issues/13)) ([36e9f77](https://github.com/simosapergis/FinLogia/commit/36e9f778d2ab1615208ebef894957fdc889e2228))
+
 ## [1.3.1](https://github.com/simosapergis/FinLogia/compare/v1.3.0...v1.3.1) (2026-04-28)
 
 
