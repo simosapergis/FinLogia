@@ -18,6 +18,8 @@ describe('useQuickPeriods', () => {
       expect(QUICK_PERIODS).toEqual([
         { label: 'Σήμερα', key: 'today' },
         { label: 'Χθες', key: 'yesterday' },
+        { label: 'Τρέχων Μήνας', key: 'current_month' },
+        { label: 'Τρέχον Έτος', key: 'current_year' },
         { label: 'Α\' Τρίμ.', key: 'q1' },
         { label: 'Β\' Τρίμ.', key: 'q2' },
         { label: 'Γ\' Τρίμ.', key: 'q3' },
@@ -60,6 +62,22 @@ describe('useQuickPeriods', () => {
       expect(range).toEqual({
         startDate: '2025-12-31',
         endDate: '2025-12-31',
+      });
+    });
+
+    it('should return correct range for "current_month"', () => {
+      const range = getDateRangeForPeriod('current_month');
+      expect(range).toEqual({
+        startDate: '2026-05-01',
+        endDate: '2026-05-15',
+      });
+    });
+
+    it('should return correct range for "current_year"', () => {
+      const range = getDateRangeForPeriod('current_year');
+      expect(range).toEqual({
+        startDate: '2026-01-01',
+        endDate: '2026-05-15',
       });
     });
 
