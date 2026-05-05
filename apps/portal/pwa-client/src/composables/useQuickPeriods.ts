@@ -8,6 +8,8 @@ export interface QuickPeriod {
 export const QUICK_PERIODS: QuickPeriod[] = [
   { label: 'Σήμερα', key: 'today' },
   { label: 'Χθες', key: 'yesterday' },
+  { label: 'Τρέχων Μήνας', key: 'current_month' },
+  { label: 'Τρέχον Έτος', key: 'current_year' },
   { label: 'Α\' Τρίμ.', key: 'q1' },
   { label: 'Β\' Τρίμ.', key: 'q2' },
   { label: 'Γ\' Τρίμ.', key: 'q3' },
@@ -23,6 +25,8 @@ export interface DateRange {
  * Returns the date range for a quick period key.
  * - today: today → today
  * - yesterday: yesterday → yesterday
+ * - current_month: 1st of current month → today
+ * - current_year: 1st of January of current year → today
  * - q1: 1 January → 31 March
  * - q2: 1 April → 30 June
  * - q3: 1 July → 30 September
@@ -46,6 +50,12 @@ export function getDateRangeForPeriod(key: string): DateRange {
       end.setTime(yesterday.getTime()); // Set end date to yesterday as well
       break;
     }
+    case 'current_month':
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      break;
+    case 'current_year':
+      start = new Date(today.getFullYear(), 0, 1);
+      break;
     case 'q1':
       start = new Date(today.getFullYear(), 0, 1);
       end.setTime(new Date(today.getFullYear(), 2, 31).getTime());
