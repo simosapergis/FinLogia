@@ -172,6 +172,15 @@ export function useClientInvoices() {
     }
   }
 
+  function removeInvoiceLocal(invoiceId: string) {
+    invoices.value = invoices.value.filter((inv) => inv.invoiceId !== invoiceId);
+    if (selectedIds.value.has(invoiceId)) {
+      const next = new Set(selectedIds.value);
+      next.delete(invoiceId);
+      selectedIds.value = next;
+    }
+  }
+
   return {
     invoices,
     loading,
@@ -190,5 +199,6 @@ export function useClientInvoices() {
     getSelectedInvoicePairs,
     markAsViewedLocal,
     setAuditStatus,
+    removeInvoiceLocal,
   };
 }

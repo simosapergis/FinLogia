@@ -46,6 +46,7 @@ echo "VITE_UPDATE_SUPPLIER_FIELDS_PATH=/updateSupplierFields_v2" >> .env.local
 echo "VITE_ADD_FINANCIAL_ENTRY_PATH=/addFinancialEntry_v2" >> .env.local
 echo "VITE_EDIT_FINANCIAL_ENTRY_PATH=/editFinancialEntry_v2" >> .env.local
 echo "VITE_DELETE_FINANCIAL_ENTRY_PATH=/deleteFinancialEntry_v2" >> .env.local
+echo "VITE_DELETE_INVOICE_PATH=/deleteInvoice_v2" >> .env.local
 echo "VITE_GET_FINANCIAL_REPORT_PATH=/getFinancialReport_v2" >> .env.local
 echo "VITE_ADD_RECURRING_EXPENSE_PATH=/addRecurringExpense_v2" >> .env.local
 echo "VITE_UPDATE_RECURRING_EXPENSE_PATH=/updateRecurringExpense_v2" >> .env.local

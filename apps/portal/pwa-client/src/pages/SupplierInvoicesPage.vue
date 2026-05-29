@@ -109,6 +109,7 @@
       :invoice="selectedInvoice"
       @close="clearInvoiceSelection"
       @updated="handleInvoiceUpdated"
+      @deleted="handleInvoiceDeleted"
     />
 
     <!-- Supplier Edit Modal -->
@@ -293,6 +294,10 @@ const clearInvoiceSelection = () => {
   setTimeout(() => {
     selectedInvoice.value = null;
   }, 300);
+};
+
+const handleInvoiceDeleted = (invoiceId: string) => {
+  removeInvoice(invoiceId);
 };
 
 // Supplier edit modal functions

@@ -11,10 +11,10 @@ describe('ReleaseNotesModal.vue', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockNotes),
-    });
+    }) as any;
   });
 
   it('should render only notes newer than previousVersion', async () => {

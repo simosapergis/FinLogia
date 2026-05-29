@@ -21,3 +21,11 @@ export async function recordInvoiceView(params: {
   const path = import.meta.env.VITE_RECORD_INVOICE_VIEW_PATH || '/recordInvoiceView_v2';
   return apiRequest<{ success: boolean }>(buildUrl(path), 'POST', params);
 }
+
+export async function deleteInvoice(params: {
+  businessId: string;
+  invoiceId: string;
+}): Promise<{ success: boolean; message: string }> {
+  const path = import.meta.env.VITE_DELETE_INVOICE_PATH || '/deleteInvoice_v2';
+  return apiRequest<{ success: boolean; message: string }>(buildUrl(path), 'POST', params);
+}

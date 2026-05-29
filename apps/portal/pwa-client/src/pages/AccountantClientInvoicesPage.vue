@@ -310,6 +310,7 @@
       :audit-status="modalAuditStatus"
       @update:audit-status="handleModalAuditStatusUpdate"
       @close="closeModal"
+      @deleted="handleInvoiceDeleted"
     />
   </section>
 </template>
@@ -354,6 +355,7 @@ const {
   getSelectedInvoicePairs,
   markAsViewedLocal,
   setAuditStatus,
+  removeInvoiceLocal,
 } = useClientInvoices();
 
 const clientName = ref(props.projectId);
@@ -480,6 +482,10 @@ function openModal(invoice: InvoiceItem) {
 
 function closeModal() {
   modalVisible.value = false;
+}
+
+function handleInvoiceDeleted(invoiceId: string) {
+  removeInvoiceLocal(invoiceId);
 }
 
 async function handleAuditStatus(invoice: InvoiceItem, status: 'registered' | 'denied' | null) {
