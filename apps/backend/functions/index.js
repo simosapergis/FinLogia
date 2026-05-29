@@ -1253,6 +1253,97 @@ export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => 
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// DELETE INVOICE (Hard Delete + Soft Delete Financial Entries)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Hard deletes an invoice document and soft deletes its associated financial entries.
+//
+// Request Body:
+// {
+//   businessId: string,
+//   invoiceId: string
+// }
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const deleteInvoice_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+  const user = authResult.user;
+
+  const { businessId, invoiceId } = req.body || {};
+  if (!businessId || typeof businessId !== 'string') {
+    return sendError(res, 400, 'businessId is required and must be a string');
+  }
+  if (!invoiceId || typeof invoiceId !== 'string') {
+    return sendError(res, 400, 'invoiceId is required and must be a string');
+  }
+
+  if (user.businessId !== businessId && !user.isAccountant) {
+    return sendError(res, 403, 'Unauthorized access to this business');
+  }
+
+  try {
+    const invoiceRef = db.collection('businesses').doc(businessId).collection('invoices').doc(invoiceId);
+    const invoiceSnap = await invoiceRef.get();
+
+    if (!invoiceSnap.exists) {
+      return sendError(res, 404, 'Invoice not found');
+    }
+
+    const invoiceData = invoiceSnap.data();
+
+    // Soft delete associated financial entries
+    const financialEntriesRef = db.collection('businesses').doc(businessId).collection(FINANCIAL_ENTRIES_COLLECTION);
+    const entriesSnapshot = await financialEntriesRef
+      .where('source', '==', ENTRY_SOURCE.invoicePayment)
+      .where('metadata.invoiceId', '==', invoiceId)
+      .get();
+
+    if (!entriesSnapshot.empty) {
+      const batch = db.batch();
+      entriesSnapshot.docs.forEach(doc => {
+        batch.update(doc.ref, {
+          isDeleted: true,
+          deletedBy: user.uid,
+          deletedByName: getUserDisplayName(user),
+          deletedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+      console.log(`Soft-deleted ${entriesSnapshot.size} financial entries for invoice ${invoiceId}`);
+    }
+
+    // Delete invoice document
+    await invoiceRef.delete();
+    console.log(`Invoice document deleted: ${invoiceId}`);
+
+    // Asynchronously delete the file from Google Cloud Storage
+    if (invoiceData.filePath) {
+      const bucketName = invoiceData.bucket || getBucketName();
+      if (bucketName) {
+        storage.bucket(bucketName).file(invoiceData.filePath).delete().catch(err => {
+          console.warn(`Failed to delete file from Cloud Storage for invoice ${invoiceId}:`, err);
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Το τιμολόγιο διαγράφηκε επιτυχώς',
+      invoiceId,
+    });
+  } catch (error) {
+    console.error('Failed to delete invoice:', error);
+    return sendError(res, 500, 'Failed to delete invoice', { details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // GET FINANCIAL REPORT
 // ═══════════════════════════════════════════════════════════════════════════════
 //

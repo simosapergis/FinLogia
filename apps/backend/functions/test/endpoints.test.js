@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { addFinancialEntry_v2, updatePaymentStatus_v2, createClientBusiness_v2, addUserToBusiness_v2, addAccountant_v2, processRecurringExpenses_v2 } from '../index.js';
+import { addFinancialEntry_v2, updatePaymentStatus_v2, createClientBusiness_v2, addUserToBusiness_v2, addAccountant_v2, processRecurringExpenses_v2, deleteInvoice_v2 } from '../index.js';
 import * as auth from '../lib/auth.js';
-import * as financial from '../lib/financial.js';
-import * as payments from '../lib/payments.js';
 
 // Mock the auth module
 vi.mock('../lib/auth.js', async (importOriginal) => {
@@ -429,6 +427,108 @@ describe('API Endpoints & Business Logic', () => {
           settlementDate: expect.anything(), // Should be the new Timestamp
         })
       );
+    });
+  });
+
+  describe('deleteInvoice_v2', () => {
+    it('should successfully hard-delete invoice and soft-delete financial entries', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' }
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'inv1' };
+
+      const configModule = await import('../lib/config.js');
+      const mockInvoiceDoc = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({ filePath: 'uploads/inv1.pdf' })
+        }),
+        delete: vi.fn().mockResolvedValue()
+      };
+      
+      const mockFinancialEntries = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue({
+          empty: false,
+          size: 1,
+          docs: [{ ref: 'entryRef1' }]
+        })
+      };
+
+      configModule.db.collection.mockImplementation((path) => {
+        if (path === 'businesses') {
+          return {
+            doc: vi.fn(() => ({
+              collection: vi.fn((subPath) => {
+                if (subPath === 'invoices') {
+                  return { doc: vi.fn(() => mockInvoiceDoc) };
+                }
+                if (subPath === 'financial_entries') {
+                  return mockFinancialEntries;
+                }
+                return { doc: vi.fn() };
+              })
+            }))
+          };
+        }
+        return { doc: vi.fn() };
+      });
+
+      const mockBatch = {
+        update: vi.fn(),
+        commit: vi.fn().mockResolvedValue(),
+        set: vi.fn(),
+        delete: vi.fn()
+      };
+      configModule.db.batch.mockReturnValue(mockBatch);
+
+      const mockBucket = {
+        file: vi.fn().mockReturnValue({
+          delete: vi.fn().mockResolvedValue()
+        })
+      };
+      configModule.storage.bucket = vi.fn().mockReturnValue(mockBucket);
+
+      await deleteInvoice_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockBatch.update).toHaveBeenCalledWith('entryRef1', expect.objectContaining({ isDeleted: true }));
+      expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+      expect(mockInvoiceDoc.delete).toHaveBeenCalledTimes(1);
+      expect(mockBucket.file).toHaveBeenCalledWith('uploads/inv1.pdf');
+    });
+
+    it('should reject if unauthorized', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessB', isAccountant: false }
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'inv1' };
+
+      await deleteInvoice_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('should return 404 if invoice does not exist', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' }
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'inv1' };
+
+      const configModule = await import('../lib/config.js');
+      configModule.db.collection.mockImplementation(() => ({
+        doc: vi.fn(() => ({
+          collection: vi.fn(() => ({
+            doc: vi.fn(() => ({
+              get: vi.fn().mockResolvedValue({ exists: false })
+            }))
+          }))
+        }))
+      }));
+
+      await deleteInvoice_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
     });
   });
 

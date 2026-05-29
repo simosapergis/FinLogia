@@ -17,6 +17,7 @@ All Firebase Functions have been migrated to v2 (Gen 2) API with `_v2` suffix fo
 | `getSignedDownloadUrl` | `getSignedDownloadUrl_v2` |
 | `addFinancialEntry` | `addFinancialEntry_v2` |
 | `deleteFinancialEntry` | `deleteFinancialEntry_v2` |
+| `deleteInvoice` | `deleteInvoice_v2` |
 | `getFinancialReport` | `getFinancialReport_v2` |
 | `addRecurringExpense` | `addRecurringExpense_v2` |
 | `updateRecurringExpense` | `updateRecurringExpense_v2` |
@@ -56,6 +57,7 @@ For example:
 - [ ] Test `getSignedDownloadUrl_v2` - Download invoice PDF
 - [ ] Test `addFinancialEntry_v2` - Add income/expense
 - [ ] Test `deleteFinancialEntry_v2` - Soft delete entry
+- [ ] Test `deleteInvoice_v2` - Hard delete invoice and soft delete related financial entries
 - [ ] Test `getFinancialReport_v2` - Get financial report
 - [ ] Test `addRecurringExpense_v2` - Add recurring expense
 - [ ] Test `updateRecurringExpense_v2` - Update recurring expense

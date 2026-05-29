@@ -38,6 +38,14 @@
               </div>
               <button
                 type="button"
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-50 hover:text-rose-600"
+                @click="showDeleteConfirm = true"
+                title="Διαγραφή"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 @click="emit('close')"
               >
@@ -134,6 +142,59 @@
           <div v-else class="px-6 py-16 text-center text-sm text-slate-500">
             Δεν βρέθηκαν δεδομένα.
           </div>
+          
+          <!-- Delete Confirmation Overlay -->
+          <Transition name="fade">
+            <div v-if="showDeleteConfirm" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <div class="flex items-start gap-4">
+                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100">
+                    <Trash2 class="h-6 w-6 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Διαγραφή Τιμολογίου</h3>
+                    <p class="mt-2 text-sm text-slate-600">
+                      Είστε σίγουροι ότι θέλετε να διαγράψετε αυτό το τιμολόγιο; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.
+                    </p>
+                    
+                    <div v-if="invoice?.auditStatus" class="mt-3 rounded-lg bg-amber-50 p-3 border border-amber-200">
+                      <div class="flex items-start gap-2">
+                        <svg class="h-5 w-5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="text-sm font-medium text-amber-800">
+                          Προσοχή: Το τιμολόγιο έχει ήδη ελεγχθεί ({{ invoice.auditStatus === 'registered' ? 'Καταχωρήθηκε' : 'Απορρίφθηκε' }}). Είστε σίγουροι ότι θέλετε να το διαγράψετε;
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    @click="showDeleteConfirm = false"
+                    :disabled="isDeleting"
+                  >
+                    Ακύρωση
+                  </button>
+                  <button
+                    type="button"
+                    class="flex min-w-[100px] items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                    @click="confirmDelete"
+                    :disabled="isDeleting"
+                  >
+                    <svg v-if="isDeleting" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span v-else>Διαγραφή</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
     </Transition>
@@ -144,10 +205,10 @@
 import { ref, watch, computed } from 'vue';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseApp } from '@/services/firebase';
-import { X, ExternalLink, Check, X as XIcon } from 'lucide-vue-next';
+import { X, ExternalLink, Check, X as XIcon, Trash2 } from 'lucide-vue-next';
 import type { Invoice as InvoiceDetail } from '@/modules/invoices/InvoiceMapper';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
-import { recordInvoiceView } from '@/services/api/invoicesApi';
+import { recordInvoiceView, deleteInvoice } from '@/services/api/invoicesApi';
 import { formatCurrency, formatDateTime } from '@/utils/date';
 import { notify } from '@/services/notifications';
 
@@ -165,11 +226,31 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   'update:auditStatus': [status: 'registered' | 'denied' | null];
+  deleted: [invoiceId: string];
 }>();
 
 const invoice = ref<InvoiceDetail | null>(null);
 const pdfUrl = ref<string | null>(null);
 const loading = ref(false);
+
+const isDeleting = ref(false);
+const showDeleteConfirm = ref(false);
+
+const confirmDelete = async () => {
+  try {
+    isDeleting.value = true;
+    await deleteInvoice({ businessId: props.clientProjectId, invoiceId: props.invoiceId });
+    notify({ message: 'Το τιμολόγιο διαγράφηκε επιτυχώς', type: 'success' });
+    showDeleteConfirm.value = false;
+    emit('deleted', props.invoiceId);
+    emit('close');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Αποτυχία διαγραφής τιμολογίου';
+    notify({ message, type: 'error' });
+  } finally {
+    isDeleting.value = false;
+  }
+};
 
 function formatInvoiceDate(date: unknown): string {
   if (!date) return '—';

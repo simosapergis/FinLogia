@@ -188,6 +188,7 @@
       :invoice="detailInvoice"
       @close="closeDetailModal"
       @updated="handleInvoiceUpdated"
+      @deleted="handleInvoiceDeleted"
     />
   </section>
 </template>
@@ -319,6 +320,10 @@ const handleInvoiceUpdated = (updatedInvoice: Invoice) => {
   }
   // Update the detail modal invoice
   detailInvoice.value = updatedInvoice;
+};
+
+const handleInvoiceDeleted = (invoiceId: string) => {
+  invoices.value = invoices.value.filter((inv) => inv.id !== invoiceId);
 };
 
 const selectQuickPeriod = (period: { label: string; key: string }) => {
