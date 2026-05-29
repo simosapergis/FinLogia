@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/simosapergis/FinLogia/compare/v1.3.2...v1.4.0) (2026-05-29)
+
+
+### Features
+
+* support delete invoice ([#14](https://github.com/simosapergis/FinLogia/issues/14)) ([98f5f28](https://github.com/simosapergis/FinLogia/commit/98f5f28d441efe91418ede6dc455415901597561))
+
 ## [1.3.2](https://github.com/simosapergis/FinLogia/compare/v1.3.1...v1.3.2) (2026-05-05)
 
 
