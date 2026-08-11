@@ -24,8 +24,10 @@ import {
   getAthensToday,
 } from './lib/config.js';
 
-import { authenticateRequest, getUserDisplayName } from './lib/auth.js';
+import { authenticateRequest, getUserDisplayName, validateBusinessAccess } from './lib/auth.js';
 import { HTTP_OPTS, requireMethod, sendError } from './lib/http-utils.js';
+import { getRole, logUsageEvent, withUsageTelemetry } from './lib/usage-telemetry.js';
+import { isUsageTelemetryEnabled } from './lib/telemetry-config.js';
 
 import {
   sanitizeFilename,
@@ -81,13 +83,68 @@ import {
   resetUserPassword,
 } from './lib/admin.js';
 
+const USAGE_EVENTS = {
+  getSignedUploadUrl_v2: { eventType: 'signed_upload_url_requested', interactionType: 'write' },
+  updatePaymentStatus_v2: { eventType: 'payment_status_updated', interactionType: 'write' },
+  updateInvoiceFields_v2: { eventType: 'invoice_fields_updated', interactionType: 'write' },
+  updateSupplierFields_v2: { eventType: 'supplier_fields_updated', interactionType: 'write' },
+  getSignedDownloadUrl_v2: { eventType: 'signed_download_url_requested', interactionType: 'read' },
+  addFinancialEntry_v2: { eventType: 'financial_entry_added', interactionType: 'write' },
+  editFinancialEntry_v2: { eventType: 'financial_entry_edited', interactionType: 'write' },
+  deleteFinancialEntry_v2: { eventType: 'financial_entry_deleted', interactionType: 'write' },
+  deleteInvoice_v2: { eventType: 'invoice_deleted', interactionType: 'write' },
+  getFinancialReport_v2: {
+    eventType: 'financial_report_requested',
+    interactionType: 'read',
+    resultCount: (body) => body?.data?.summary?.entryCount,
+  },
+  addRecurringExpense_v2: { eventType: 'recurring_expense_added', interactionType: 'write' },
+  updateRecurringExpense_v2: { eventType: 'recurring_expense_updated', interactionType: 'write' },
+  getRecurringExpenses_v2: {
+    eventType: 'recurring_expenses_requested',
+    interactionType: 'read',
+    resultCount: (body) => body?.data?.length,
+  },
+  updateAuditStatus_v2: { eventType: 'invoice_audit_status_updated', interactionType: 'write' },
+  recordInvoiceView_v2: { eventType: 'invoice_view_recorded', interactionType: 'write' },
+  exportInvoices_v2: {
+    eventType: 'invoices_exported',
+    interactionType: 'read',
+    resultCount: (body) => body?.data?.invoiceCount,
+  },
+  createClientBusiness_v2: { eventType: 'client_business_created', interactionType: 'write' },
+  addUserToBusiness_v2: { eventType: 'user_added_to_business', interactionType: 'write' },
+  addAccountant_v2: { eventType: 'accountant_added', interactionType: 'write' },
+  resetUserPassword_v2: { eventType: 'user_password_reset', interactionType: 'write' },
+};
+
+const usageOnRequest = (opts, functionName, handler) =>
+  onRequest(opts, withUsageTelemetry(functionName, USAGE_EVENTS[functionName], handler));
+
+const FRONTEND_FIRESTORE_EVENTS = new Set([
+  'invoice_record_saved',
+  'invoices_list_requested',
+  'suppliers_list_requested',
+  'supplier_invoices_requested',
+  'supplier_invoice_detail_requested',
+  'unpaid_invoices_requested',
+  'invoices_by_date_range_requested',
+  'invoices_by_invoice_date_requested',
+  'suppliers_delivering_today_requested',
+  'clients_list_requested',
+  'client_invoices_requested',
+  'accountant_invoice_detail_requested',
+  'client_business_detail_requested',
+  'invoice_notification_marked_seen',
+]);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIGNED UPLOAD URL
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: getSignedUploadUrl
-export const getSignedUploadUrl_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const getSignedUploadUrl_v2 = usageOnRequest(HTTP_OPTS, 'getSignedUploadUrl_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const bucketName = getBucketName();
@@ -234,6 +291,70 @@ export const processInvoiceDocument_v2 = onDocumentWritten(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// RECORD USAGE EVENT (Frontend direct Firestore interactions only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const recordUsageEvent_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+  if (!requireMethod(req, res, 'POST')) return;
+
+  const authResult = await authenticateRequest(req);
+  if (authResult.error) {
+    return sendError(res, authResult.status, authResult.error);
+  }
+
+  const body = req.body || {};
+  const { eventType, interactionType, backend, businessId, route, status, resultCount, durationMs } = body;
+
+  if (!FRONTEND_FIRESTORE_EVENTS.has(eventType)) {
+    return sendError(res, 400, 'Invalid usage event type');
+  }
+
+  if (interactionType !== 'read' && interactionType !== 'write') {
+    return sendError(res, 400, 'Invalid interaction type');
+  }
+
+  if (backend !== 'firestore') {
+    return sendError(res, 400, 'Invalid telemetry backend');
+  }
+
+  if (status !== 'success' && status !== 'error') {
+    return sendError(res, 400, 'Invalid usage event status');
+  }
+
+  const access = validateBusinessAccess(authResult.user, businessId);
+  if (access.error) {
+    return sendError(res, access.status, access.error);
+  }
+
+  let telemetryEnabled = true;
+  try {
+    telemetryEnabled = await isUsageTelemetryEnabled();
+  } catch (error) {
+    console.warn('Failed to evaluate usage telemetry config:', error);
+  }
+
+  if (!telemetryEnabled) {
+    return res.status(202).json({ success: true });
+  }
+
+  logUsageEvent({
+    eventType,
+    functionName: 'direct_firestore',
+    interactionType,
+    backend,
+    route: typeof route === 'string' ? route : undefined,
+    businessId,
+    uid: authResult.user.uid,
+    role: getRole(authResult.user),
+    status,
+    ...(typeof resultCount === 'number' ? { resultCount } : {}),
+    ...(typeof durationMs === 'number' ? { durationMs } : {}),
+  });
+
+  return res.status(202).json({ success: true });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PAYMENT STATUS UPDATE FUNCTION
 // ═══════════════════════════════════════════════════════════════════════════════
 //
@@ -259,7 +380,7 @@ export const processInvoiceDocument_v2 = onDocumentWritten(
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: updatePaymentStatus
-export const updatePaymentStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const updatePaymentStatus_v2 = usageOnRequest(HTTP_OPTS, 'updatePaymentStatus_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   // 1. Authenticate
@@ -523,7 +644,7 @@ export const updatePaymentStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: updateInvoiceFields
-export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const updateInvoiceFields_v2 = usageOnRequest(HTTP_OPTS, 'updateInvoiceFields_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   // 1. Authenticate
@@ -784,7 +905,7 @@ export const updateInvoiceFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: updateSupplierFields
-export const updateSupplierFields_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const updateSupplierFields_v2 = usageOnRequest(HTTP_OPTS, 'updateSupplierFields_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   // 1. Authenticate
@@ -944,7 +1065,7 @@ export const updateSupplierFields_v2 = onRequest(HTTP_OPTS, async (req, res) => 
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: getSignedDownloadUrl
-export const getSignedDownloadUrl_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const getSignedDownloadUrl_v2 = usageOnRequest(HTTP_OPTS, 'getSignedDownloadUrl_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1011,7 +1132,7 @@ export const getSignedDownloadUrl_v2 = onRequest(HTTP_OPTS, async (req, res) => 
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: addFinancialEntry
-export const addFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const addFinancialEntry_v2 = usageOnRequest(HTTP_OPTS, 'addFinancialEntry_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   // Authenticate
@@ -1090,7 +1211,7 @@ export const addFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: editFinancialEntry
-export const editFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const editFinancialEntry_v2 = usageOnRequest(HTTP_OPTS, 'editFinancialEntry_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1202,7 +1323,7 @@ export const editFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: deleteFinancialEntry
-export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const deleteFinancialEntry_v2 = usageOnRequest(HTTP_OPTS, 'deleteFinancialEntry_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1265,7 +1386,7 @@ export const deleteFinancialEntry_v2 = onRequest(HTTP_OPTS, async (req, res) => 
 // }
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const deleteInvoice_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const deleteInvoice_v2 = usageOnRequest(HTTP_OPTS, 'deleteInvoice_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1360,7 +1481,7 @@ export const deleteInvoice_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: getFinancialReport
-export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const getFinancialReport_v2 = usageOnRequest(HTTP_OPTS, 'getFinancialReport_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1476,7 +1597,7 @@ export const getFinancialReport_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: addRecurringExpense
-export const addRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const addRecurringExpense_v2 = usageOnRequest(HTTP_OPTS, 'addRecurringExpense_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1551,7 +1672,7 @@ export const addRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: updateRecurringExpense
-export const updateRecurringExpense_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const updateRecurringExpense_v2 = usageOnRequest(HTTP_OPTS, 'updateRecurringExpense_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1719,7 +1840,7 @@ export const processRecurringExpenses_v2 = onSchedule(
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: getRecurringExpenses
-export const getRecurringExpenses_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const getRecurringExpenses_v2 = usageOnRequest(HTTP_OPTS, 'getRecurringExpenses_v2', async (req, res) => {
   if (!requireMethod(req, res, 'GET')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1761,7 +1882,7 @@ export const getRecurringExpenses_v2 = onRequest(HTTP_OPTS, async (req, res) => 
 // UPDATE INVOICE AUDIT STATUS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const updateAuditStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const updateAuditStatus_v2 = usageOnRequest(HTTP_OPTS, 'updateAuditStatus_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1805,7 +1926,7 @@ export const updateAuditStatus_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 // RECORD INVOICE VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const recordInvoiceView_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const recordInvoiceView_v2 = usageOnRequest(HTTP_OPTS, 'recordInvoiceView_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -1896,7 +2017,7 @@ const EXPORT_OPTS = {
 
 // Blue-green deployment: v2 functions run alongside v1
 // Old function name: exportInvoices
-export const exportInvoices_v2 = onRequest(EXPORT_OPTS, async (req, res) => {
+export const exportInvoices_v2 = usageOnRequest(EXPORT_OPTS, 'exportInvoices_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   // 1. Authenticate
@@ -1993,7 +2114,7 @@ export const exportInvoices_v2 = onRequest(EXPORT_OPTS, async (req, res) => {
 // ADMIN FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const createClientBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const createClientBusiness_v2 = usageOnRequest(HTTP_OPTS, 'createClientBusiness_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -2021,7 +2142,7 @@ export const createClientBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => 
   }
 });
 
-export const addUserToBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const addUserToBusiness_v2 = usageOnRequest(HTTP_OPTS, 'addUserToBusiness_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -2048,7 +2169,7 @@ export const addUserToBusiness_v2 = onRequest(HTTP_OPTS, async (req, res) => {
   }
 });
 
-export const addAccountant_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const addAccountant_v2 = usageOnRequest(HTTP_OPTS, 'addAccountant_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -2075,7 +2196,7 @@ export const addAccountant_v2 = onRequest(HTTP_OPTS, async (req, res) => {
   }
 });
 
-export const resetUserPassword_v2 = onRequest(HTTP_OPTS, async (req, res) => {
+export const resetUserPassword_v2 = usageOnRequest(HTTP_OPTS, 'resetUserPassword_v2', async (req, res) => {
   if (!requireMethod(req, res, 'POST')) return;
 
   const authResult = await authenticateRequest(req);
@@ -2103,4 +2224,3 @@ export const resetUserPassword_v2 = onRequest(HTTP_OPTS, async (req, res) => {
 });
 
 export { handleInboundEmail } from './lib/inbound-email.js';
-

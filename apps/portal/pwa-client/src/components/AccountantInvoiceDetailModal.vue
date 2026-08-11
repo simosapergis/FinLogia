@@ -209,6 +209,7 @@ import { X, ExternalLink, Check, X as XIcon, Trash2 } from 'lucide-vue-next';
 import type { Invoice as InvoiceDetail } from '@/modules/invoices/InvoiceMapper';
 import { requestSignedDownloadUrl } from '@/services/api/requestSignedDownloadUrl';
 import { recordInvoiceView, deleteInvoice } from '@/services/api/invoicesApi';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { formatCurrency, formatDateTime } from '@/utils/date';
 import { notify } from '@/services/notifications';
 
@@ -288,7 +289,15 @@ watch(
     pdfUrl.value = null;
 
     try {
-      const docSnap = await getDoc(doc(db, `businesses/${props.clientProjectId}/invoices/${props.invoiceId}`));
+      const docSnap = await recordDirectFirestoreUsage(
+        {
+          eventType: 'accountant_invoice_detail_requested',
+          interactionType: 'read',
+          businessId: props.clientProjectId,
+        },
+        () => getDoc(doc(db, `businesses/${props.clientProjectId}/invoices/${props.invoiceId}`)),
+        (snapshot) => snapshot.exists() ? 1 : 0
+      );
       if (docSnap.exists()) {
         invoice.value = docSnap.data() as InvoiceDetail;
         

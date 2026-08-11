@@ -35,6 +35,7 @@ export const apiRequest = async <T>(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Finlogia-Route': window.location.pathname,
     },
   };
 

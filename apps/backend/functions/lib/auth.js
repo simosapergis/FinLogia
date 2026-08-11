@@ -22,6 +22,8 @@ async function authenticateRequest(req) {
     if (userDoc.exists) {
       decodedToken.businessId = userDoc.data().businessId;
     }
+
+    req.auth = decodedToken;
     
     return { user: decodedToken };
   } catch (error) {

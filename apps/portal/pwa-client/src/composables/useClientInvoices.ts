@@ -4,6 +4,7 @@ import { firebaseApp } from '@/services/firebase';
 import type { InvoiceItem, SupplierGroup } from '@/modules/invoices/Invoice';
 import { updateAuditStatus } from '@/services/api/invoicesApi';
 import { notify } from '@/services/notifications';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { useUserStore } from '@/store/userStore';
 
 const db = getFirestore(firebaseApp);
@@ -94,7 +95,11 @@ export function useClientInvoices() {
         orderBy(dateType, 'desc')
       );
 
-      const snapshot = await getDocs(q);
+      const snapshot = await recordDirectFirestoreUsage(
+        { eventType: 'client_invoices_requested', interactionType: 'read', businessId: clientProjectId },
+        () => getDocs(q),
+        (result) => result.docs.length
+      );
       invoices.value = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
