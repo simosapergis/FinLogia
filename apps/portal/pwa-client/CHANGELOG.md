@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/simosapergis/FinLogia/compare/v1.4.0...v1.5.0) (2026-08-11)
+
+
+### Features
+
+* add usage telemetry controls ([581a971](https://github.com/simosapergis/FinLogia/commit/581a9714e557558baaa2763247277d672c771a5d))
+
 # [1.4.0](https://github.com/simosapergis/FinLogia/compare/v1.3.2...v1.4.0) (2026-05-29)
 
 
