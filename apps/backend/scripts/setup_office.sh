@@ -31,12 +31,12 @@ handle_error() {
     echo -e "\n${YELLOW}Possible fixes:${NC}"
     echo "1. Ensure you are logged in: 'gcloud auth login' and 'firebase login'"
     echo "2. Ensure the Firebase project is on the Blaze (Pay-as-you-go) plan."
-    echo "3. Ensure you have the necessary IAM permissions on the project."
+    echo "3. Ensure you have the necessary IAM permissions on the project, including roles/logging.configWriter."
     exit $exit_code
 }
 trap 'handle_error ${LINENO} "$BASH_COMMAND"' ERR
 
-TOTAL_STEPS=14
+TOTAL_STEPS=15
 
 echo -e "${CYAN}=== Invoice Scanner - New Client Setup ===${NC}"
 echo -e "This script will create and provision a new Firebase/GCP project in europe-west3."
@@ -235,6 +235,7 @@ else
         run.googleapis.com \
         artifactregistry.googleapis.com \
         identitytoolkit.googleapis.com \
+        logging.googleapis.com \
         pubsub.googleapis.com \
         cloudscheduler.googleapis.com \
         firebaserules.googleapis.com \
@@ -501,12 +502,23 @@ else
     mark_step_done "iam_roles"
 fi
 
-# ── 11. Environment Configuration ──────────────────────────────────────────────
+# ── 11. Usage Telemetry Logging ────────────────────────────────────────────────
+
+if is_step_done "usage_logging"; then
+    echo -e "[10/${TOTAL_STEPS}] Usage telemetry logging already configured. Skipping..."
+else
+    echo -e "[10/${TOTAL_STEPS}] Configuring usage telemetry Cloud Logging bucket and routing..."
+    ./scripts/setup_usage_logging.sh "$PROJECT_ID" >> "$LOG_FILE" 2>&1
+    echo -e "  -> Usage telemetry logs route to dedicated 365-day bucket."
+    mark_step_done "usage_logging"
+fi
+
+# ── 12. Environment Configuration ──────────────────────────────────────────────
 
 if is_step_done "env_config"; then
-    echo -e "[10/${TOTAL_STEPS}] Environment configuration already generated. Skipping..."
+    echo -e "[11/${TOTAL_STEPS}] Environment configuration already generated. Skipping..."
 else
-    echo -e "[10/${TOTAL_STEPS}] Generating .env configuration..."
+    echo -e "[11/${TOTAL_STEPS}] Generating .env configuration..."
     if [ -z "$SA_EMAIL" ]; then
         SA_EMAIL=$(gcloud iam service-accounts list --project "$PROJECT_ID" --format="value(email)" --filter="email:firebase-adminsdk")
     fi
@@ -521,12 +533,12 @@ EOF
     mark_step_done "env_config"
 fi
 
-# ── 12. Authentication Setup ────────────────────────────────────────────────────
+# ── 13. Authentication Setup ────────────────────────────────────────────────────
 
 if is_step_done "auth_setup"; then
-    echo -e "[11/${TOTAL_STEPS}] Authentication already configured. Skipping..."
+    echo -e "[12/${TOTAL_STEPS}] Authentication already configured. Skipping..."
 else
-    echo -e "[11/${TOTAL_STEPS}] Configuring Email/Password authentication..."
+    echo -e "[12/${TOTAL_STEPS}] Configuring Email/Password authentication..."
     ACCESS_TOKEN=$(gcloud auth print-access-token)
 
     echo -e "  -> Initializing Identity Platform..."
@@ -628,12 +640,12 @@ else
     mark_step_done "auth_setup"
 fi
 
-# ── 13. Artifact Registry Cleanup Policy ──────────────────────────────────────
+# ── 14. Artifact Registry Cleanup Policy ──────────────────────────────────────
 
 if is_step_done "artifact_cleanup"; then
-    echo -e "[12/${TOTAL_STEPS}] Artifact Registry cleanup policy already set. Skipping..."
+    echo -e "[13/${TOTAL_STEPS}] Artifact Registry cleanup policy already set. Skipping..."
 else
-    echo -e "[12/${TOTAL_STEPS}] Configuring Artifact Registry cleanup policy..."
+    echo -e "[13/${TOTAL_STEPS}] Configuring Artifact Registry cleanup policy..."
 
     if ! gcloud artifacts repositories describe gcf-artifacts --location=europe-west3 --project="$PROJECT_ID" >> "$LOG_FILE" 2>&1; then
         gcloud artifacts repositories create gcf-artifacts \
@@ -667,12 +679,12 @@ POLICY_EOF
     mark_step_done "artifact_cleanup"
 fi
 
-# ── 14. Deployment ─────────────────────────────────────────────────────────────
+# ── 15. Deployment ─────────────────────────────────────────────────────────────
 
 if is_step_done "deployment"; then
-    echo -e "[13/${TOTAL_STEPS}] Deployment already completed. Skipping..."
+    echo -e "[14/${TOTAL_STEPS}] Deployment already completed. Skipping..."
 else
-    echo -e "[13/${TOTAL_STEPS}] Deploying Cloud Functions (this may take a few minutes)..."
+    echo -e "[14/${TOTAL_STEPS}] Deploying Cloud Functions (this may take a few minutes)..."
     DEPLOY_MAX_RETRIES=3
     DEPLOY_ATTEMPT=0
     DEPLOY_OK=false
@@ -694,12 +706,12 @@ else
     mark_step_done "deployment"
 fi
 
-# ── 15. Register Firebase Web App & Export Config ──────────────────────────────
+# ── 16. Register Firebase Web App & Export Config ──────────────────────────────
 
 if is_step_done "register_web_app"; then
-    echo -e "[14/${TOTAL_STEPS}] Firebase Web App already registered. Skipping..."
+    echo -e "[15/${TOTAL_STEPS}] Firebase Web App already registered. Skipping..."
 else
-    echo -e "[14/${TOTAL_STEPS}] Registering Firebase Web App & exporting config..."
+    echo -e "[15/${TOTAL_STEPS}] Registering Firebase Web App & exporting config..."
 
     EXISTING_APP=$(firebase apps:list WEB --project "$PROJECT_ID" 2>/dev/null | grep -c "App ID" || true)
     if [ "$EXISTING_APP" -gt 0 ]; then
@@ -753,7 +765,7 @@ else
     mark_step_done "register_web_app"
 fi
 
-# ── 16. Create Initial Client Business ──────────────────────────────────────────
+# ── 17. Create Initial Client Business ──────────────────────────────────────────
 
 if [ -n "$LOCAL_ID" ] && [ -n "$ADMIN_EMAIL" ]; then
     echo -e "\n${YELLOW}Would you like to create an initial client business for this office and assign the admin to it? (y/N):${NC} \c"
