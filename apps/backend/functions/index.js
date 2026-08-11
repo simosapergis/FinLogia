@@ -27,6 +27,7 @@ import {
 import { authenticateRequest, getUserDisplayName, validateBusinessAccess } from './lib/auth.js';
 import { HTTP_OPTS, requireMethod, sendError } from './lib/http-utils.js';
 import { getRole, logUsageEvent, withUsageTelemetry } from './lib/usage-telemetry.js';
+import { isUsageTelemetryEnabled } from './lib/telemetry-config.js';
 
 import {
   sanitizeFilename,
@@ -323,6 +324,17 @@ export const recordUsageEvent_v2 = onRequest(HTTP_OPTS, async (req, res) => {
   const access = validateBusinessAccess(authResult.user, businessId);
   if (access.error) {
     return sendError(res, access.status, access.error);
+  }
+
+  let telemetryEnabled = true;
+  try {
+    telemetryEnabled = await isUsageTelemetryEnabled();
+  } catch (error) {
+    console.warn('Failed to evaluate usage telemetry config:', error);
+  }
+
+  if (!telemetryEnabled) {
+    return res.status(202).json({ success: true });
   }
 
   logUsageEvent({

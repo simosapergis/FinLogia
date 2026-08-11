@@ -1,3 +1,5 @@
+import { isUsageTelemetryEnabled } from './telemetry-config.js';
+
 const USAGE_LOG_TYPE = 'usage_event';
 
 const getRole = (user) => {
@@ -79,21 +81,27 @@ function withUsageTelemetry(functionName, metadata, handler) {
       if (originalJson) {
         res.json = originalJson;
       }
-      const httpStatus = thrownError ? 500 : getHttpStatus(capturedStatus, res);
-      const resultCount = metadata.resultCount?.(responseBody);
-      logUsageEvent({
-        eventType: metadata.eventType,
-        functionName,
-        interactionType: metadata.interactionType,
-        backend: 'cloud_function',
-        route: getRoute(req),
-        businessId: getRequestBusinessId(req),
-        uid: req.auth?.uid,
-        role: getRole(req.auth),
-        status: httpStatus >= 400 || thrownError ? 'error' : 'success',
-        ...(typeof resultCount === 'number' ? { resultCount } : {}),
-        durationMs: Date.now() - startMs,
-      });
+      try {
+        if (await isUsageTelemetryEnabled()) {
+          const httpStatus = thrownError ? 500 : getHttpStatus(capturedStatus, res);
+          const resultCount = metadata.resultCount?.(responseBody);
+          logUsageEvent({
+            eventType: metadata.eventType,
+            functionName,
+            interactionType: metadata.interactionType,
+            backend: 'cloud_function',
+            route: getRoute(req),
+            businessId: getRequestBusinessId(req),
+            uid: req.auth?.uid,
+            role: getRole(req.auth),
+            status: httpStatus >= 400 || thrownError ? 'error' : 'success',
+            ...(typeof resultCount === 'number' ? { resultCount } : {}),
+            durationMs: Date.now() - startMs,
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to evaluate usage telemetry config:', error);
+      }
     }
   };
 }

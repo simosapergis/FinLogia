@@ -39,6 +39,15 @@ vi.mock('firebase-admin', () => {
           projectId: 'mock-project-id',
         },
       }),
+      remoteConfig: () => ({
+        getTemplate: vi.fn().mockResolvedValue({
+          parameters: {
+            telemetry_enabled: {
+              defaultValue: { value: 'true' },
+            },
+          },
+        }),
+      }),
     },
   };
 });

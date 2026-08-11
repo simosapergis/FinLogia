@@ -47,7 +47,8 @@ Flat structure scoped by `businessId`:
 
 - **Cloud Logging Only**: Usage telemetry is emitted as structured `usage_event` logs. Do not add Firestore writes or other persisted telemetry stores for this concern.
 - **Dedicated Retention Bucket**: Provision each accounting office project with a dedicated Cloud Logging bucket for `jsonPayload.logType="usage_event"` logs. Keep `_Default` for normal short-term technical logs and route long-retention telemetry through `apps/backend/scripts/setup_usage_logging.sh`.
-- **Provisioning IAM**: The operator or CI identity that creates/updates usage telemetry log buckets and sinks needs `roles/logging.configWriter` on the target office project.
+- **Remote Kill Switch**: Usage telemetry must be controlled per accounting-office project through Firebase Remote Config parameter `telemetry_enabled`. Default it to `true`; setting it to `false` must stop telemetry emission without changing application behavior or requiring deployment.
+- **Provisioning IAM**: The operator or CI identity that creates/updates usage telemetry log buckets and sinks needs `roles/logging.configWriter` on the target office project. The identity that creates/updates the Remote Config telemetry switch needs `roles/cloudconfig.admin`.
 - **One Event per Backend Interaction**: Track user-facing backend interactions at action granularity, covering Cloud Function calls and direct portal Firestore actions. Do not track hovers, tab changes, route navigation, or individual document read/write internals.
 - **Best Effort**: Telemetry must never change existing application behavior. Frontend failures are swallowed with `console.warn`; backend telemetry is emitted from shared safe paths.
 - **Privacy**: Raw `businessId` is intentionally included after access validation. Do not include emails, supplier names, invoice numbers, free text, document IDs, or other business document identifiers in telemetry payloads.

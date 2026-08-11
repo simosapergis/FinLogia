@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { recordUsageEvent_v2 } from '../index.js';
 import { logUsageEvent, withUsageTelemetry } from '../lib/usage-telemetry.js';
 import * as auth from '../lib/auth.js';
+import * as telemetryConfig from '../lib/telemetry-config.js';
 
 vi.mock('../lib/auth.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -10,6 +11,10 @@ vi.mock('../lib/auth.js', async (importOriginal) => {
     authenticateRequest: vi.fn(),
   };
 });
+
+vi.mock('../lib/telemetry-config.js', () => ({
+  isUsageTelemetryEnabled: vi.fn(),
+}));
 
 vi.mock('../lib/config.js', () => ({
   admin: {},
@@ -49,6 +54,7 @@ describe('usage telemetry', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    telemetryConfig.isUsageTelemetryEnabled.mockResolvedValue(true);
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -104,6 +110,58 @@ describe('usage telemetry', () => {
     expect(consoleWarnSpy).toHaveBeenCalledWith('Failed to emit usage telemetry:', expect.any(Error));
   });
 
+  it('does not emit wrapped function telemetry when Remote Config disables telemetry', async () => {
+    telemetryConfig.isUsageTelemetryEnabled.mockResolvedValue(false);
+
+    const handler = withUsageTelemetry(
+      'testFunction_v2',
+      { eventType: 'test_event', interactionType: 'read' },
+      async (_req, res) => res.status(200).json({ success: true })
+    );
+    const req = { method: 'POST', headers: {}, body: { businessId: 'businessA' } };
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress wrapped function errors when Remote Config disables telemetry', async () => {
+    telemetryConfig.isUsageTelemetryEnabled.mockResolvedValue(false);
+    const originalError = new Error('handler failed');
+
+    const handler = withUsageTelemetry(
+      'testFunction_v2',
+      { eventType: 'test_event', interactionType: 'read' },
+      async () => {
+        throw originalError;
+      }
+    );
+
+    await expect(handler({ method: 'POST', headers: {}, body: {} }, createResponse())).rejects.toBe(originalError);
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not change the wrapped function response when Remote Config evaluation fails', async () => {
+    telemetryConfig.isUsageTelemetryEnabled.mockRejectedValue(new Error('remote config unavailable'));
+
+    const handler = withUsageTelemetry(
+      'testFunction_v2',
+      { eventType: 'test_event', interactionType: 'read' },
+      async (_req, res) => res.status(200).json({ success: true })
+    );
+    const req = { method: 'POST', headers: {}, body: { businessId: 'businessA' } };
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(consoleWarnSpy).toHaveBeenCalledWith('Failed to evaluate usage telemetry config:', expect.any(Error));
+  });
+
   it('accepts authenticated frontend Firestore telemetry for the user business', async () => {
     auth.authenticateRequest.mockResolvedValue({
       user: { uid: 'user1', businessId: 'businessA' },
@@ -138,6 +196,58 @@ describe('usage telemetry', () => {
       role: 'business',
       resultCount: 42,
     });
+  });
+
+  it('accepts but does not log frontend Firestore telemetry when Remote Config disables telemetry', async () => {
+    telemetryConfig.isUsageTelemetryEnabled.mockResolvedValue(false);
+    auth.authenticateRequest.mockResolvedValue({
+      user: { uid: 'user1', businessId: 'businessA' },
+    });
+    const req = {
+      method: 'POST',
+      headers: {},
+      body: {
+        eventType: 'invoices_list_requested',
+        interactionType: 'read',
+        backend: 'firestore',
+        route: '/expenses',
+        businessId: 'businessA',
+        status: 'success',
+      },
+    };
+    const res = createResponse();
+
+    await recordUsageEvent_v2(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not reject frontend Firestore telemetry when Remote Config evaluation fails', async () => {
+    telemetryConfig.isUsageTelemetryEnabled.mockRejectedValue(new Error('remote config unavailable'));
+    auth.authenticateRequest.mockResolvedValue({
+      user: { uid: 'user1', businessId: 'businessA' },
+    });
+    const req = {
+      method: 'POST',
+      headers: {},
+      body: {
+        eventType: 'invoices_list_requested',
+        interactionType: 'read',
+        backend: 'firestore',
+        route: '/expenses',
+        businessId: 'businessA',
+        status: 'success',
+      },
+    };
+    const res = createResponse();
+
+    await recordUsageEvent_v2(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(consoleWarnSpy).toHaveBeenCalledWith('Failed to evaluate usage telemetry config:', expect.any(Error));
   });
 
   it('rejects unauthenticated frontend telemetry', async () => {

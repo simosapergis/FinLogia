@@ -1,5 +1,6 @@
 import { getAuthToken, buildUrl } from '@/services/api/apiClient';
 import { useUserStore } from '@/store/userStore';
+import { isTelemetryEnabled } from '@/services/usageTelemetryConfig';
 
 type InteractionType = 'read' | 'write';
 type UsageStatus = 'success' | 'error';
@@ -26,6 +27,10 @@ export const recordUsageEvent = async (event: UsageTelemetryEvent): Promise<void
   }
 
   try {
+    if (!(await isTelemetryEnabled())) {
+      return;
+    }
+
     const token = await getAuthToken();
     const response = await fetch(buildUrl(RECORD_USAGE_EVENT_PATH), {
       method: 'POST',

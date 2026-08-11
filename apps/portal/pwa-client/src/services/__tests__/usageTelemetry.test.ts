@@ -2,15 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { useUserStore } from '@/store/userStore';
+import * as usageTelemetryConfig from '@/services/usageTelemetryConfig';
 
 vi.mock('@/services/api/apiClient', () => ({
   getAuthToken: vi.fn().mockResolvedValue('token-1'),
   buildUrl: (path: string) => `https://functions.example${path}`,
 }));
 
+vi.mock('@/services/usageTelemetryConfig', () => ({
+  isTelemetryEnabled: vi.fn(),
+}));
+
 describe('usageTelemetry', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    vi.mocked(usageTelemetryConfig.isTelemetryEnabled).mockResolvedValue(true);
     const userStore = useUserStore();
     userStore.businessId = 'businessA';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 202 }));
@@ -51,6 +57,19 @@ describe('usageTelemetry', () => {
 
     expect(result).toEqual(['supplier']);
     await vi.waitFor(() => expect(console.warn).toHaveBeenCalled());
+  });
+
+  it('does not send direct Firestore telemetry when Remote Config disables telemetry', async () => {
+    vi.mocked(usageTelemetryConfig.isTelemetryEnabled).mockResolvedValue(false);
+
+    const result = await recordDirectFirestoreUsage(
+      { eventType: 'invoices_list_requested', interactionType: 'read' },
+      async () => ['invoice']
+    );
+
+    expect(result).toEqual(['invoice']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('preserves the original action error while recording an error event', async () => {

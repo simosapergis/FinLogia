@@ -20,6 +20,20 @@ The standard setup creates:
 
 Normal technical logs remain in `_Default`. Usage telemetry is routed to `usage-events-365`.
 
+## Runtime Telemetry Switch
+
+Usage telemetry also has a Firebase Remote Config kill switch:
+
+```text
+telemetry_enabled
+```
+
+The standard value is `true`. When it is `true`, FinLogia writes `usage_event` logs for direct Firestore actions and Cloud Function calls. When it is `false`, the app and functions continue to work normally, but new telemetry logs are skipped.
+
+The switch is per accounting-office Firebase project. Turning it off for one office does not affect any other office project.
+
+Both the portal and Cloud Functions cache the value for 5 minutes. A change normally takes effect within that cache window. If Remote Config cannot be fetched, telemetry defaults to enabled; a warm runtime that already fetched `false` can keep honoring that cached disabled value until it refreshes again.
+
 ## Event Attribution
 
 `businessId` always identifies the business whose data was accessed.
@@ -57,6 +71,18 @@ roles/logging.configWriter
 
 If the script needs to grant the sink writer identity access to the project, the caller also needs permission to update project IAM policy.
 
+Remote Config provisioning needs:
+
+```text
+roles/cloudconfig.admin
+```
+
+The Cloud Functions runtime service account needs:
+
+```text
+roles/cloudconfig.viewer
+```
+
 ## New Accounting Offices
 
 `setup_office.sh` runs usage logging provisioning automatically:
@@ -65,6 +91,8 @@ If the script needs to grant the sink writer identity access to the project, the
 cd apps/backend
 ./scripts/setup_office.sh
 ```
+
+It also provisions `telemetry_enabled=true` in Firebase Remote Config for the new office.
 
 ## Existing Accounting Offices
 
@@ -79,6 +107,7 @@ Provision one existing office:
 ```bash
 cd apps/backend
 ./scripts/setup_usage_logging_existing_offices.sh "$PROJECT_ID"
+./scripts/setup_remote_config_existing_offices.sh "$PROJECT_ID"
 ```
 
 Provision multiple offices:
@@ -87,6 +116,7 @@ Provision multiple offices:
 cd apps/backend
 PROJECT_IDS=("office-project-a" "office-project-b")
 ./scripts/setup_usage_logging_existing_offices.sh "${PROJECT_IDS[@]}"
+./scripts/setup_remote_config_existing_offices.sh "${PROJECT_IDS[@]}"
 ```
 
 Provision every office listed in `apps/portal/clients.json`:
@@ -94,6 +124,7 @@ Provision every office listed in `apps/portal/clients.json`:
 ```bash
 cd apps/backend
 ./scripts/setup_usage_logging_existing_offices.sh
+./scripts/setup_remote_config_existing_offices.sh
 ```
 
 Keep a 30-day copy in `_Default` as well as the 365-day telemetry bucket:
@@ -101,6 +132,209 @@ Keep a 30-day copy in `_Default` as well as the 365-day telemetry bucket:
 ```bash
 cd apps/backend
 ./scripts/setup_usage_logging_existing_offices.sh "$PROJECT_ID" -- --keep-default-copy
+```
+
+Set the initial Remote Config value explicitly:
+
+```bash
+cd apps/backend
+./scripts/setup_remote_config_existing_offices.sh "$PROJECT_ID" -- --telemetry-enabled true
+```
+
+Disable or re-enable telemetry without deployment:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" false
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" true
+```
+
+## Single Office Deployment Runbook
+
+Use this runbook when applying the telemetry implementation to one existing accounting-office project. It is intentionally scoped by `PROJECT_ID`; do not use the no-argument rollout scripts unless the goal is to update every project in `apps/portal/clients.json`.
+
+Set the target project once:
+
+```bash
+PROJECT_ID="your-office-project-id"
+```
+
+For the demo office, use:
+
+```bash
+PROJECT_ID="finlogia-demo"
+```
+
+Validate locally before deployment:
+
+```bash
+npm run test:all
+```
+
+Provision the long-retention Cloud Logging bucket, sink, and `_Default` exclusion:
+
+```bash
+cd apps/backend
+./scripts/setup_usage_logging_existing_offices.sh "$PROJECT_ID"
+```
+
+Provision Firebase Remote Config for the runtime telemetry switch:
+
+```bash
+cd apps/backend
+./scripts/setup_remote_config_existing_offices.sh "$PROJECT_ID" -- --telemetry-enabled true
+```
+
+Verify the Remote Config value:
+
+```bash
+TOKEN="$(gcloud auth print-access-token)"
+
+curl -sS "https://firebaseremoteconfig.googleapis.com/v1/projects/${PROJECT_ID}/remoteConfig" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "X-Goog-User-Project: ${PROJECT_ID}" \
+  | jq -r '.parameters.telemetry_enabled.defaultValue.value'
+```
+
+Deploy backend code, Firestore rules, and Storage rules to that office only:
+
+```bash
+cd apps/backend
+firebase deploy --only functions,firestore:rules,storage --project "$PROJECT_ID" --force
+```
+
+Build the portal for that office. This mirrors the GitHub Actions deployment and avoids writing a persistent `.env.local` file:
+
+```bash
+cd apps/portal/pwa-client
+
+CLIENT_CONFIG="$(jq -c '.[] | select(.projectId == "'"$PROJECT_ID"'")' ../clients.json)"
+CLIENT_SLUG="${PROJECT_ID#finlogia-}"
+CLIENT_NAME="$(echo "$CLIENT_SLUG" | tr '-' ' ' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')"
+
+VITE_FIREBASE_API_KEY="$(echo "$CLIENT_CONFIG" | jq -r .apiKey)" \
+VITE_FIREBASE_AUTH_DOMAIN="$(echo "$CLIENT_CONFIG" | jq -r .authDomain)" \
+VITE_FIREBASE_PROJECT_ID="$PROJECT_ID" \
+VITE_FIREBASE_STORAGE_BUCKET="$(echo "$CLIENT_CONFIG" | jq -r .storageBucket)" \
+VITE_FIREBASE_MESSAGING_SENDER_ID="$(echo "$CLIENT_CONFIG" | jq -r .messagingSenderId)" \
+VITE_FIREBASE_APP_ID="$(echo "$CLIENT_CONFIG" | jq -r .appId)" \
+VITE_FIREBASE_BUCKET_FOLDER=uploads \
+VITE_INVOICE_EXPIRY_DAYS=7 \
+VITE_BASE_URL="https://europe-west3-${PROJECT_ID}.cloudfunctions.net" \
+VITE_SIGNED_UPLOAD_URL_PATH=/getSignedUploadUrl_v2 \
+VITE_SIGNED_DOWNLOAD_URL_PATH=/getSignedDownloadUrl_v2 \
+VITE_UPDATE_INVOICE_FIELDS_PATH=/updateInvoiceFields_v2 \
+VITE_UPDATE_PAYMENT_STATUS_PATH=/updatePaymentStatus_v2 \
+VITE_UPDATE_SUPPLIER_FIELDS_PATH=/updateSupplierFields_v2 \
+VITE_ADD_FINANCIAL_ENTRY_PATH=/addFinancialEntry_v2 \
+VITE_EDIT_FINANCIAL_ENTRY_PATH=/editFinancialEntry_v2 \
+VITE_DELETE_FINANCIAL_ENTRY_PATH=/deleteFinancialEntry_v2 \
+VITE_GET_FINANCIAL_REPORT_PATH=/getFinancialReport_v2 \
+VITE_ADD_RECURRING_EXPENSE_PATH=/addRecurringExpense_v2 \
+VITE_UPDATE_RECURRING_EXPENSE_PATH=/updateRecurringExpense_v2 \
+VITE_GET_RECURRING_EXPENSES_PATH=/getRecurringExpenses_v2 \
+VITE_EXPORT_INVOICES_PATH=/exportInvoices_v2 \
+VITE_UPDATE_AUDIT_STATUS_PATH=/updateAuditStatus_v2 \
+VITE_RECORD_INVOICE_VIEW_PATH=/recordInvoiceView_v2 \
+VITE_CREATE_CLIENT_BUSINESS_PATH=/createClientBusiness_v2 \
+VITE_ADD_USER_TO_BUSINESS_PATH=/addUserToBusiness_v2 \
+VITE_ADD_ACCOUNTANT_PATH=/addAccountant_v2 \
+VITE_RESET_USER_PASSWORD_PATH=/resetUserPassword_v2 \
+VITE_CLIENT_NAME="$CLIENT_NAME" \
+npm run build
+```
+
+Deploy portal hosting to that office only:
+
+```bash
+cd apps/portal/pwa-client
+firebase deploy --only hosting --project "$PROJECT_ID"
+```
+
+Smoke-check hosting:
+
+```bash
+curl -I "https://${PROJECT_ID}.web.app"
+```
+
+Toggle telemetry without deployment after the code is deployed:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" false
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" true
+```
+
+After toggling, allow up to 5 minutes for the portal and warm Cloud Function instances to refresh their cached Remote Config value.
+
+### Single Office Rollback
+
+Use the smallest rollback that matches the failure.
+
+If telemetry itself is causing noise, cost, or privacy concern, disable telemetry first. This does not change app behavior and does not require deployment:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" false
+```
+
+If the custom Cloud Logging bucket or sink setup failed partway through, roll back log routing. This restores `_Default` first, then deletes the custom telemetry sink, and keeps the custom bucket and retained logs:
+
+```bash
+cd apps/backend
+./scripts/rollback_usage_logging.sh "$PROJECT_ID"
+```
+
+Delete the custom telemetry bucket only when retained telemetry logs can be discarded:
+
+```bash
+cd apps/backend
+./scripts/rollback_usage_logging.sh "$PROJECT_ID" --delete-bucket
+```
+
+If the backend code deployment is bad, redeploy the previous known-good commit to the same project. The provisioning scripts do not roll back Cloud Functions code:
+
+```bash
+git checkout <previous-good-commit>
+cd apps/backend
+firebase deploy --only functions,firestore:rules,storage --project "$PROJECT_ID" --force
+```
+
+If the portal hosting deployment is bad, rebuild and redeploy the previous known-good commit using the same office-specific environment variables from this runbook:
+
+```bash
+git checkout <previous-good-commit>
+cd apps/portal/pwa-client
+# Re-run the office-specific build command from this runbook.
+firebase deploy --only hosting --project "$PROJECT_ID"
+```
+
+If only the Remote Config value is wrong, set the intended value again. Keeping the Remote Config parameter is preferred; it is the runtime control plane for telemetry:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" true
+```
+
+For `finlogia-demo`, the deployment performed on August 11, 2026 followed this exact sequence:
+
+```bash
+cd apps/backend
+./scripts/setup_remote_config_existing_offices.sh finlogia-demo -- --telemetry-enabled true
+firebase deploy --only functions,firestore:rules,storage --project finlogia-demo --force
+
+cd ../portal/pwa-client
+# Built with PROJECT_ID=finlogia-demo and the environment variables shown above.
+npm run build
+firebase deploy --only hosting --project finlogia-demo
+
+TOKEN="$(gcloud auth print-access-token)"
+curl -sS "https://firebaseremoteconfig.googleapis.com/v1/projects/finlogia-demo/remoteConfig" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "X-Goog-User-Project: finlogia-demo" \
+  | jq -r '.parameters.telemetry_enabled.defaultValue.value'
+
+curl -I "https://finlogia-demo.web.app"
 ```
 
 ## Gcloud Command Reference
@@ -112,6 +346,25 @@ PROJECT_ID="your-office-project-id"
 BUSINESS_ID="your-business-id"
 BUCKET_ID="usage-events-365"
 LOCATION="global"
+```
+
+Check the current Remote Config telemetry switch:
+
+```bash
+TOKEN="$(gcloud auth print-access-token)"
+
+curl -sS "https://firebaseremoteconfig.googleapis.com/v1/projects/${PROJECT_ID}/remoteConfig" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "X-Goog-User-Project: ${PROJECT_ID}" \
+  | jq -r '.parameters.telemetry_enabled.defaultValue.value'
+```
+
+Update the switch from terminal:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" false
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" true
 ```
 
 Read recent telemetry from the custom bucket:
@@ -266,11 +519,26 @@ For all options:
 cd apps/backend
 ./scripts/setup_usage_logging.sh --help
 ./scripts/setup_usage_logging_existing_offices.sh --help
+./scripts/setup_remote_config.sh --help
+./scripts/setup_remote_config_existing_offices.sh --help
 ```
 
 ## Rollback
 
-Rollback restores `_Default` first, then removes the telemetry sink. By default it keeps the telemetry bucket and retained logs:
+Rollback for telemetry has three separate layers:
+
+- Remote Config switch: fastest way to stop telemetry without deployment.
+- Cloud Logging routing: restores `_Default`, deletes the custom telemetry sink, and optionally deletes the custom bucket.
+- Application code: redeploy a previous known-good backend/portal commit to the target project.
+
+Disable telemetry immediately:
+
+```bash
+cd apps/backend
+./scripts/set_telemetry_enabled.sh "$PROJECT_ID" false
+```
+
+Roll back Cloud Logging routing. By default this keeps the telemetry bucket and retained logs:
 
 ```bash
 cd apps/backend
