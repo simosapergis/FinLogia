@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { firebaseApp } from '@/services/firebase';
 import { notify } from '@/services/notifications';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 
 export interface Client {
   id: string;
@@ -21,7 +22,11 @@ export function useClients() {
     loading.value = true;
     error.value = '';
     try {
-      const snapshot = await getDocs(collection(db, 'businesses'));
+      const snapshot = await recordDirectFirestoreUsage(
+        { eventType: 'clients_list_requested', interactionType: 'read' },
+        () => getDocs(collection(db, 'businesses')),
+        (result) => result.docs.length
+      );
       const fetchedClients = snapshot.docs.map(doc => ({
         id: doc.id,
         projectId: doc.id, // Map businessId to projectId for now

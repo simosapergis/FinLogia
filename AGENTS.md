@@ -43,6 +43,13 @@ Flat structure scoped by `businessId`:
   - **Patch (0.0.x)**: `fix:`, `perf:` (e.g., `fix: resolve crash`)
   - **No Release**: `chore:`, `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`
 
+## 4.1 Usage Telemetry
+
+- **Cloud Logging Only**: Usage telemetry is emitted as structured `usage_event` logs. Do not add Firestore writes or other persisted telemetry stores for this concern.
+- **One Event per Backend Interaction**: Track user-facing backend interactions at action granularity, covering Cloud Function calls and direct portal Firestore actions. Do not track hovers, tab changes, route navigation, or individual document read/write internals.
+- **Best Effort**: Telemetry must never change existing application behavior. Frontend failures are swallowed with `console.warn`; backend telemetry is emitted from shared safe paths.
+- **Privacy**: Raw `businessId` is intentionally included after access validation. Do not include emails, supplier names, invoice numbers, free text, document IDs, or other business document identifiers in telemetry payloads.
+
 ## 5. Do's and Don'ts
 
 **Do:**

@@ -327,6 +327,7 @@ import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseApp } from '@/services/firebase';
 import { useClientInvoices } from '@/composables/useClientInvoices';
 import { exportClientInvoices } from '@/services/api/exportApi';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { getMonthOptions, getMonthRange } from '@/utils/date';
 import { QUICK_PERIODS, getDateRangeForPeriod } from '@/composables/useQuickPeriods';
 import { notify } from '@/services/notifications';
@@ -523,7 +524,11 @@ async function handleExport() {
 
 onMounted(async () => {
   try {
-    const docSnap = await getDoc(doc(db, 'businesses', props.projectId));
+    const docSnap = await recordDirectFirestoreUsage(
+      { eventType: 'client_business_detail_requested', interactionType: 'read', businessId: props.projectId },
+      () => getDoc(doc(db, 'businesses', props.projectId)),
+      (snapshot) => snapshot.exists() ? 1 : 0
+    );
     if (docSnap.exists()) {
       clientName.value = docSnap.data().displayName || props.projectId;
       clientBucketName.value = docSnap.data().bucketName || '';

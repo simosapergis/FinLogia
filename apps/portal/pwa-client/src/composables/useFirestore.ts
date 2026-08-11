@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseApp } from '@/services/firebase';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { useUserStore } from '@/store/userStore';
 import type { Invoice } from '@/modules/invoices/InvoiceMapper';
 import type { Supplier } from '@/modules/suppliers/Supplier';
@@ -70,29 +71,46 @@ export function useFirestore() {
   const saveInvoiceRecord = async (invoice: Invoice) => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) throw new Error('No business ID found');
-    const invoiceDoc = doc(getInvoicesRef(), invoice.id);
-    await setDoc(invoiceDoc, invoice, { merge: true });
-    return invoice;
+    return recordDirectFirestoreUsage(
+      { eventType: 'invoice_record_saved', interactionType: 'write', businessId },
+      async () => {
+        const invoiceDoc = doc(getInvoicesRef(), invoice.id);
+        await setDoc(invoiceDoc, invoice, { merge: true });
+        return invoice;
+      }
+    );
   };
 
   const fetchInvoices = async (): Promise<Invoice[]> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return [];
-    const snapshot = await getDocs(query(getInvoicesRef(), orderBy('uploadedAt', 'desc')));
-    const invoices = snapshot.docs.map((docSnapshot) => docSnapshot.data() as Invoice);
-    console.info('[Firestore] fetched invoices', invoices.length);
-    return invoices;
+    return recordDirectFirestoreUsage(
+      { eventType: 'invoices_list_requested', interactionType: 'read', businessId },
+      async () => {
+        const snapshot = await getDocs(query(getInvoicesRef(), orderBy('uploadedAt', 'desc')));
+        const invoices = snapshot.docs.map((docSnapshot) => docSnapshot.data() as Invoice);
+        console.info('[Firestore] fetched invoices', invoices.length);
+        return invoices;
+      },
+      (invoices) => invoices.length
+    );
   };
 
   const fetchSuppliers = async (): Promise<Supplier[]> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return [];
-    const snapshot = await getDocs(query(getSuppliersRef(), orderBy('name', 'asc')));
-    const suppliers = snapshot.docs.map((docSnapshot) => {
-      const data = docSnapshot.data() as Supplier;
-      return { ...data, id: docSnapshot.id };
-    });
-    return suppliers;
+    return recordDirectFirestoreUsage(
+      { eventType: 'suppliers_list_requested', interactionType: 'read', businessId },
+      async () => {
+        const snapshot = await getDocs(query(getSuppliersRef(), orderBy('name', 'asc')));
+        const suppliers = snapshot.docs.map((docSnapshot) => {
+          const data = docSnapshot.data() as Supplier;
+          return { ...data, id: docSnapshot.id };
+        });
+        return suppliers;
+      },
+      (suppliers) => suppliers.length
+    );
   };
 
   const fetchSupplierInvoices = async (
@@ -102,74 +120,98 @@ export function useFirestore() {
   ): Promise<{ invoices: Invoice[]; lastVisible: QueryDocumentSnapshot<DocumentData> | null; hasMore: boolean }> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return { invoices: [], lastVisible: null, hasMore: false };
-    let q = query(
-      getInvoicesRef(),
-      where('supplierId', '==', supplierId),
-      orderBy('uploadedAt', 'desc'),
-      limit(pageSize)
+    return recordDirectFirestoreUsage(
+      { eventType: 'supplier_invoices_requested', interactionType: 'read', businessId },
+      async () => {
+        let q = query(
+          getInvoicesRef(),
+          where('supplierId', '==', supplierId),
+          orderBy('uploadedAt', 'desc'),
+          limit(pageSize)
+        );
+
+        if (lastVisibleDoc) {
+          q = query(q, startAfter(lastVisibleDoc));
+        }
+
+        const snapshot = await getDocs(q);
+        const invoices = snapshot.docs.map((docSnapshot) => ({ ...(docSnapshot.data() as Invoice), id: docSnapshot.id }));
+        
+        const lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+        const hasMore = snapshot.docs.length === pageSize;
+
+        return { invoices, lastVisible, hasMore };
+      },
+      (result) => result.invoices.length
     );
-
-    if (lastVisibleDoc) {
-      q = query(q, startAfter(lastVisibleDoc));
-    }
-
-    const snapshot = await getDocs(q);
-    const invoices = snapshot.docs.map((docSnapshot) => ({ ...(docSnapshot.data() as Invoice), id: docSnapshot.id }));
-    
-    const lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-    const hasMore = snapshot.docs.length === pageSize;
-
-    return { invoices, lastVisible, hasMore };
   };
 
   const fetchSupplierInvoice = async (supplierId: string, invoiceId: string): Promise<Invoice | null> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return null;
-    const docPath = `businesses/${getBusinessId()}/invoices/${invoiceId}`;
-    console.info('[Firestore] fetching document', docPath);
-    const invoiceDoc = doc(db, docPath);
-    const snapshot = await getDoc(invoiceDoc);
-    if (!snapshot.exists()) {
-      console.info('[Firestore] document not found', docPath);
-      return null;
-    }
-    const invoice = { ...(snapshot.data() as Invoice), id: snapshot.id };
-    console.info('[Firestore] fetched supplier invoice', invoice.id);
-    return invoice;
+    return recordDirectFirestoreUsage(
+      { eventType: 'supplier_invoice_detail_requested', interactionType: 'read', businessId },
+      async () => {
+        const docPath = `businesses/${getBusinessId()}/invoices/${invoiceId}`;
+        console.info('[Firestore] fetching document', docPath);
+        const invoiceDoc = doc(db, docPath);
+        const snapshot = await getDoc(invoiceDoc);
+        if (!snapshot.exists()) {
+          console.info('[Firestore] document not found', docPath);
+          return null;
+        }
+        const invoice = { ...(snapshot.data() as Invoice), id: snapshot.id };
+        console.info('[Firestore] fetched supplier invoice', invoice.id);
+        return invoice;
+      },
+      (invoice) => invoice ? 1 : 0
+    );
   };
 
   const fetchUnpaidInvoices = async (): Promise<Invoice[]> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return [];
-    const q = query(
-      getInvoicesRef(),
-      where('paymentStatus', 'in', ['unpaid', 'partially_paid']),
-      orderBy('uploadedAt', 'desc')
+    return recordDirectFirestoreUsage(
+      { eventType: 'unpaid_invoices_requested', interactionType: 'read', businessId },
+      async () => {
+        const q = query(
+          getInvoicesRef(),
+          where('paymentStatus', 'in', ['unpaid', 'partially_paid']),
+          orderBy('uploadedAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const invoices = snapshot.docs.map((docSnapshot) => ({
+          ...(docSnapshot.data() as Invoice),
+          id: docSnapshot.id,
+        }));
+        return invoices;
+      },
+      (invoices) => invoices.length
     );
-    const snapshot = await getDocs(q);
-    const invoices = snapshot.docs.map((docSnapshot) => ({
-      ...(docSnapshot.data() as Invoice),
-      id: docSnapshot.id,
-    }));
-    return invoices;
   };
 
   const fetchInvoicesByDateRange = async (startDate: Date, endDate: Date): Promise<Invoice[]> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return [];
-    const q = query(
-      getInvoicesRef(),
-      where('uploadedAt', '>=', startDate),
-      where('uploadedAt', '<=', endDate),
-      orderBy('uploadedAt', 'desc')
+    return recordDirectFirestoreUsage(
+      { eventType: 'invoices_by_date_range_requested', interactionType: 'read', businessId },
+      async () => {
+        const q = query(
+          getInvoicesRef(),
+          where('uploadedAt', '>=', startDate),
+          where('uploadedAt', '<=', endDate),
+          orderBy('uploadedAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const invoices = snapshot.docs.map((docSnapshot) => ({
+          ...(docSnapshot.data() as Invoice),
+          id: docSnapshot.id,
+        }));
+        console.info('[Firestore] fetched invoices by date range', invoices.length);
+        return invoices;
+      },
+      (invoices) => invoices.length
     );
-    const snapshot = await getDocs(q);
-    const invoices = snapshot.docs.map((docSnapshot) => ({
-      ...(docSnapshot.data() as Invoice),
-      id: docSnapshot.id,
-    }));
-    console.info('[Firestore] fetched invoices by date range', invoices.length);
-    return invoices;
   };
 
   /**
@@ -187,28 +229,34 @@ export function useFirestore() {
       return suppliersDeliveringTodayCache;
     }
 
-    const dayOfWeek = getTodayDayOfWeek();
-    console.info('[Firestore] Fetching suppliers for day of week:', dayOfWeek);
+    return recordDirectFirestoreUsage(
+      { eventType: 'suppliers_delivering_today_requested', interactionType: 'read', businessId },
+      async () => {
+        const dayOfWeek = getTodayDayOfWeek();
+        console.info('[Firestore] Fetching suppliers for day of week:', dayOfWeek);
 
-    const q = query(
-      getSuppliersRef(),
-      where('delivery.dayOfWeek', '==', dayOfWeek),
-      orderBy('name', 'asc'),
-      limit(10)
+        const q = query(
+          getSuppliersRef(),
+          where('delivery.dayOfWeek', '==', dayOfWeek),
+          orderBy('name', 'asc'),
+          limit(10)
+        );
+
+        const snapshot = await getDocs(q);
+        const suppliers = snapshot.docs.map((docSnapshot) => ({
+          ...(docSnapshot.data() as Supplier),
+          id: docSnapshot.id,
+        }));
+
+        // Update cache
+        suppliersDeliveringTodayCache = suppliers;
+        cacheDay = dayOfWeek;
+
+        console.info('[Firestore] Fetched suppliers delivering today:', suppliers.length);
+        return suppliers;
+      },
+      (suppliers) => suppliers.length
     );
-
-    const snapshot = await getDocs(q);
-    const suppliers = snapshot.docs.map((docSnapshot) => ({
-      ...(docSnapshot.data() as Supplier),
-      id: docSnapshot.id,
-    }));
-
-    // Update cache
-    suppliersDeliveringTodayCache = suppliers;
-    cacheDay = dayOfWeek;
-
-    console.info('[Firestore] Fetched suppliers delivering today:', suppliers.length);
-    return suppliers;
   };
 
   /**
@@ -225,24 +273,30 @@ export function useFirestore() {
   const fetchInvoicesByInvoiceDate = async (startDate: Date, endDate: Date): Promise<ExportInvoice[]> => {
     const businessId = userStore.currentBusinessId;
     if (!businessId) return [];
-    const q = query(
-      getInvoicesRef(),
-      where('invoiceDate', '>=', Timestamp.fromDate(startDate)),
-      where('invoiceDate', '<=', Timestamp.fromDate(endDate)),
-      orderBy('invoiceDate', 'desc')
+    return recordDirectFirestoreUsage(
+      { eventType: 'invoices_by_invoice_date_requested', interactionType: 'read', businessId },
+      async () => {
+        const q = query(
+          getInvoicesRef(),
+          where('invoiceDate', '>=', Timestamp.fromDate(startDate)),
+          where('invoiceDate', '<=', Timestamp.fromDate(endDate)),
+          orderBy('invoiceDate', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const invoices = snapshot.docs.map((docSnapshot) => {
+          const data = docSnapshot.data();
+          return {
+            ...(data as Invoice),
+            id: docSnapshot.id,
+            supplierId: data.supplierId ?? '',
+            downloadedBy: (data.downloadedBy as ExportInvoice['downloadedBy']) ?? {},
+          };
+        });
+        console.info('[Firestore] fetched invoices by invoiceDate range', invoices.length);
+        return invoices;
+      },
+      (invoices) => invoices.length
     );
-    const snapshot = await getDocs(q);
-    const invoices = snapshot.docs.map((docSnapshot) => {
-      const data = docSnapshot.data();
-      return {
-        ...(data as Invoice),
-        id: docSnapshot.id,
-        supplierId: data.supplierId ?? '',
-        downloadedBy: (data.downloadedBy as ExportInvoice['downloadedBy']) ?? {},
-      };
-    });
-    console.info('[Firestore] fetched invoices by invoiceDate range', invoices.length);
-    return invoices;
   };
 
   return {

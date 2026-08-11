@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseApp } from '@/services/firebase';
+import { recordDirectFirestoreUsage } from '@/services/usageTelemetry';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useNotifications } from '@/composables/useNotifications';
 import { useAuth } from '@/composables/useAuth';
@@ -120,7 +121,10 @@ export function useInvoiceNotifications() {
       const businessId = userStore.currentBusinessId;
       if (!businessId) return;
       const docRef = doc(db, `businesses/${businessId}/metadata_invoices`, invoiceMetadataId);
-      await updateDoc(docRef, { notificationSeen: true, notificationSeenAt: serverTimestamp() });
+      await recordDirectFirestoreUsage(
+        { eventType: 'invoice_notification_marked_seen', interactionType: 'write', businessId },
+        () => updateDoc(docRef, { notificationSeen: true, notificationSeenAt: serverTimestamp() })
+      );
     } catch (error) {
       console.error('[InvoiceNotifications] Failed to mark as seen:', error);
     }
@@ -150,4 +154,3 @@ export function useInvoiceNotifications() {
     initializeNotifications,
   };
 }
-
