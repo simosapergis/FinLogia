@@ -390,7 +390,7 @@ gcloud logging read 'jsonPayload.logType="usage_event"' \
   --format='table(timestamp,jsonPayload.eventType,jsonPayload.backend,jsonPayload.businessId,jsonPayload.status,jsonPayload.resultCount,jsonPayload.durationMs)'
 ```
 
-Read telemetry for one business:
+Read telemetry for one business as a compact table:
 
 ```bash
 gcloud logging read 'jsonPayload.logType="usage_event" AND jsonPayload.businessId="'"$BUSINESS_ID"'"' \
@@ -402,7 +402,7 @@ gcloud logging read 'jsonPayload.logType="usage_event" AND jsonPayload.businessI
   --format='table(timestamp,jsonPayload.eventType,jsonPayload.backend,jsonPayload.businessId,jsonPayload.uid,jsonPayload.role,jsonPayload.status,jsonPayload.resultCount,jsonPayload.durationMs)'
 ```
 
-Read telemetry for one business with a returned-entry count:
+Default business query: read telemetry for one business with a returned-entry count and role:
 
 ```bash
 gcloud logging read 'jsonPayload.logType="usage_event" AND jsonPayload.businessId="'"$BUSINESS_ID"'"' \
