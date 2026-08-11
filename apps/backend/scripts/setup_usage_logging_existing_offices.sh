@@ -19,7 +19,7 @@ Runs usage telemetry logging provisioning for existing accounting-office project
 
 Examples:
   ./scripts/setup_usage_logging_existing_offices.sh finlogia-mdellatolas
-  ./scripts/setup_usage_logging_existing_offices.sh finlogia-mdellatolas finlogia-xerimexeri
+  ./scripts/setup_usage_logging_existing_offices.sh finlogia-demo finlogia-mdellatolas
   ./scripts/setup_usage_logging_existing_offices.sh
   ./scripts/setup_usage_logging_existing_offices.sh -- --keep-default-copy
 
