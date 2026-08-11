@@ -81,7 +81,11 @@ printf "  - %s\n" "${PROJECTS[@]}"
 
 for PROJECT_ID in "${PROJECTS[@]}"; do
     echo -e "\n${CYAN}--- ${PROJECT_ID} ---${NC}"
-    "${SCRIPT_DIR}/setup_usage_logging.sh" "$PROJECT_ID" "${PASSTHROUGH[@]}"
+    if [ "${#PASSTHROUGH[@]}" -gt 0 ]; then
+        "${SCRIPT_DIR}/setup_usage_logging.sh" "$PROJECT_ID" "${PASSTHROUGH[@]}"
+    else
+        "${SCRIPT_DIR}/setup_usage_logging.sh" "$PROJECT_ID"
+    fi
 done
 
 echo -e "\n${GREEN}Usage telemetry logging configured for ${#PROJECTS[@]} project(s).${NC}"
