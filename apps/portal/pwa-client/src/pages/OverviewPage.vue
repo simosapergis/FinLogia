@@ -53,7 +53,7 @@
     </div>
 
     <!-- Suppliers Delivering Today -->
-    <div v-if="suppliersDeliveringToday.length > 0" class="mb-6 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 p-4 shadow-sm">
+    <div v-if="SUPPLIERS_DELIVERING_TODAY_ENABLED && suppliersDeliveringToday.length > 0" class="mb-6 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 p-4 shadow-sm">
       <div class="mb-3 flex flex-wrap items-center gap-2">
         <Truck class="h-5 w-5 text-emerald-600" />
         <h3 class="text-sm font-semibold text-emerald-800">Σημερινές Παραδόσεις</h3>
@@ -213,6 +213,8 @@ import { useUserStore } from '@/store/userStore';
 const route = useRoute();
 const { fetchUnpaidInvoices, fetchSuppliersDeliveringToday, needsDeliveryCacheRefresh } = useFirestore();
 const userStore = useUserStore();
+
+const SUPPLIERS_DELIVERING_TODAY_ENABLED = false;
 
 const invoices = ref<Invoice[]>([]);
 const suppliersDeliveringToday = ref<Supplier[]>([]);
@@ -453,10 +455,9 @@ const refreshInvoices = async () => {
   loading.value = true;
   error.value = null;
   try {
-    // Fetch both invoices and suppliers delivering today in parallel
     const [fetchedInvoices, fetchedSuppliers] = await Promise.all([
       fetchUnpaidInvoices(),
-      fetchSuppliersDeliveringToday(),
+      SUPPLIERS_DELIVERING_TODAY_ENABLED ? fetchSuppliersDeliveringToday() : Promise.resolve([]),
     ]);
     invoices.value = fetchedInvoices;
     suppliersDeliveringToday.value = fetchedSuppliers;
@@ -470,6 +471,8 @@ const refreshInvoices = async () => {
 
 // Refresh suppliers if day has changed (midnight case)
 const refreshSuppliersIfDayChanged = async () => {
+  if (!SUPPLIERS_DELIVERING_TODAY_ENABLED) return;
+
   if (needsDeliveryCacheRefresh()) {
     console.info('[OverviewPage] Day changed, refreshing suppliers delivering today');
     try {
@@ -492,12 +495,16 @@ onMounted(() => {
     console.log(`accountant: ${userStore.user?.email}`);
   }
   refreshInvoices();
-  // Listen for visibility changes (handles midnight case when app resumes)
-  document.addEventListener('visibilitychange', handleVisibilityChange);
+  if (SUPPLIERS_DELIVERING_TODAY_ENABLED) {
+    // Listen for visibility changes (handles midnight case when app resumes)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  if (SUPPLIERS_DELIVERING_TODAY_ENABLED) {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 // Auto-refresh when navigating back to this page (data might be stale)
@@ -506,7 +513,9 @@ watch(
   (newPath) => {
     if (newPath === '/' || newPath === '/home') {
       // Always check if day changed for suppliers
-      refreshSuppliersIfDayChanged();
+      if (SUPPLIERS_DELIVERING_TODAY_ENABLED) {
+        refreshSuppliersIfDayChanged();
+      }
 
       const now = Date.now();
       // Only refresh invoices if more than 30 seconds since last fetch
