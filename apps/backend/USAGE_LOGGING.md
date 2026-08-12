@@ -500,6 +500,229 @@ curl -sG "https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/timeSeries
 
 Cloud Logging buckets are managed storage, not single files. The billing metric above reports bytes ingested over a period; it is not an exact current on-disk file size.
 
+## Firestore Invoice Count Queries
+
+These queries count stored invoice documents for one business in one office project. They read from:
+
+```text
+businesses/{businessId}/invoices
+```
+
+They count invoice documents, not uploaded pages. If one invoice has multiple pages, it still counts as one invoice document.
+
+Use `uploadedAt` when you want the storage/upload date. Use `invoiceDate` when you want the invoice issue date.
+
+Set the target values:
+
+```bash
+PROJECT_ID="your-office-project-id"
+BUSINESS_ID="your-business-id"
+DATE_FIELD="uploadedAt" # or invoiceDate
+START_DATE="2026-01-01"
+END_DATE="2026-08-12"
+START_MONTH="2026-01"
+END_MONTH="2026-08"
+```
+
+If the Node Admin SDK fails with `UNAUTHENTICATED`, use these REST commands. They use the active `gcloud` OAuth token and do not require Application Default Credentials.
+
+Count invoices from the start of the current year through a specific day, grouped by date:
+
+```bash
+node --input-type=module <<'NODE'
+import { execFileSync } from 'node:child_process';
+
+const projectId = process.env.PROJECT_ID;
+const businessId = process.env.BUSINESS_ID;
+const dateField = process.env.DATE_FIELD || 'uploadedAt';
+const startDate = process.env.START_DATE;
+const endDate = process.env.END_DATE;
+const token = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
+const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/businesses/${businessId}/invoices`;
+
+const firestoreValueToDate = (value) => {
+  if (!value) return null;
+  if (value.timestampValue) return new Date(value.timestampValue);
+  if (value.stringValue) return new Date(value.stringValue);
+  if (value.integerValue) return new Date(Number(value.integerValue));
+  if (value.doubleValue) return new Date(Number(value.doubleValue));
+  if (value.mapValue?.fields?._seconds?.integerValue) {
+    return new Date(Number(value.mapValue.fields._seconds.integerValue) * 1000);
+  }
+  return null;
+};
+
+const formatDate = (date) => {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
+
+let pageToken = '';
+let scanned = 0;
+let totalInRange = 0;
+let missing = 0;
+let invalid = 0;
+const counts = new Map();
+
+while (true) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('pageSize', '1000');
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Goog-User-Project': projectId,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Firestore REST read failed: HTTP ${response.status} ${body}`);
+  }
+
+  const payload = await response.json();
+  for (const document of payload.documents || []) {
+    scanned += 1;
+    const value = document.fields?.[dateField];
+    if (!value) {
+      missing += 1;
+      continue;
+    }
+    const date = firestoreValueToDate(value);
+    const day = formatDate(date);
+    if (!day) {
+      invalid += 1;
+      continue;
+    }
+    if (day < startDate || day > endDate) continue;
+    totalInRange += 1;
+    counts.set(day, (counts.get(day) || 0) + 1);
+  }
+
+  pageToken = payload.nextPageToken || '';
+  if (!pageToken) break;
+}
+
+const rows = [...counts.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([date, count]) => ({ date, count }));
+
+console.log(`project: ${projectId}`);
+console.log(`businessId: ${businessId}`);
+console.log(`dateField: ${dateField}`);
+console.log(`range: ${startDate}..${endDate} Europe/Athens`);
+console.log(`documentsScanned: ${scanned}`);
+console.log(`totalInRange: ${totalInRange}`);
+console.log(`missingDateField: ${missing}`);
+console.log(`invalidDateField: ${invalid}`);
+console.table(rows);
+NODE
+```
+
+Count invoices from the start of the current year through a specific month, grouped by month:
+
+```bash
+node --input-type=module <<'NODE'
+import { execFileSync } from 'node:child_process';
+
+const projectId = process.env.PROJECT_ID;
+const businessId = process.env.BUSINESS_ID;
+const dateField = process.env.DATE_FIELD || 'uploadedAt';
+const startMonth = process.env.START_MONTH;
+const endMonth = process.env.END_MONTH;
+const token = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
+const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/businesses/${businessId}/invoices`;
+
+const firestoreValueToDate = (value) => {
+  if (!value) return null;
+  if (value.timestampValue) return new Date(value.timestampValue);
+  if (value.stringValue) return new Date(value.stringValue);
+  if (value.integerValue) return new Date(Number(value.integerValue));
+  if (value.doubleValue) return new Date(Number(value.doubleValue));
+  if (value.mapValue?.fields?._seconds?.integerValue) {
+    return new Date(Number(value.mapValue.fields._seconds.integerValue) * 1000);
+  }
+  return null;
+};
+
+const formatMonth = (date) => {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(date);
+};
+
+let pageToken = '';
+let scanned = 0;
+let totalInRange = 0;
+let missing = 0;
+let invalid = 0;
+const counts = new Map();
+
+while (true) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('pageSize', '1000');
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Goog-User-Project': projectId,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Firestore REST read failed: HTTP ${response.status} ${body}`);
+  }
+
+  const payload = await response.json();
+  for (const document of payload.documents || []) {
+    scanned += 1;
+    const value = document.fields?.[dateField];
+    if (!value) {
+      missing += 1;
+      continue;
+    }
+    const date = firestoreValueToDate(value);
+    const month = formatMonth(date);
+    if (!month) {
+      invalid += 1;
+      continue;
+    }
+    if (month < startMonth || month > endMonth) continue;
+    totalInRange += 1;
+    counts.set(month, (counts.get(month) || 0) + 1);
+  }
+
+  pageToken = payload.nextPageToken || '';
+  if (!pageToken) break;
+}
+
+const rows = [...counts.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([month, count]) => ({ month, count }));
+
+console.log(`project: ${projectId}`);
+console.log(`businessId: ${businessId}`);
+console.log(`dateField: ${dateField}`);
+console.log(`range: ${startMonth}..${endMonth} Europe/Athens`);
+console.log(`documentsScanned: ${scanned}`);
+console.log(`totalInRange: ${totalInRange}`);
+console.log(`missingDateField: ${missing}`);
+console.log(`invalidDateField: ${invalid}`);
+console.table(rows);
+NODE
+```
+
 ## Custom Values
 
 The reusable setup script supports custom bucket, location, retention, and sink values:
