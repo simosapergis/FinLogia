@@ -502,11 +502,13 @@ Cloud Logging buckets are managed storage, not single files. The billing metric 
 
 ## Firestore Invoice Count Queries
 
-These queries count stored invoice documents for one business in one office project. They read from:
+These queries count stored invoice documents from Firestore. The single-business queries read from:
 
 ```text
 businesses/{businessId}/invoices
 ```
+
+The project-wide query scans every direct document in `businesses` and then reads each `businesses/{businessId}/invoices` collection. It does not print or require a specific `businessId`.
 
 They count invoice documents, not uploaded pages. If one invoice has multiple pages, it still counts as one invoice document.
 
@@ -720,6 +722,142 @@ console.log(`totalInRange: ${totalInRange}`);
 console.log(`missingDateField: ${missing}`);
 console.log(`invalidDateField: ${invalid}`);
 console.table(rows);
+NODE
+```
+
+Count invoices across the whole office project, grouped by month and date:
+
+```bash
+node --input-type=module <<'NODE'
+import { execFileSync } from 'node:child_process';
+
+const projectId = process.env.PROJECT_ID;
+const dateField = process.env.DATE_FIELD || 'uploadedAt';
+const startDate = process.env.START_DATE;
+const endDate = process.env.END_DATE;
+const startMonth = process.env.START_MONTH;
+const endMonth = process.env.END_MONTH;
+const token = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
+const rootUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+
+const fetchJson = async (url) => {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Goog-User-Project': projectId,
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Firestore REST read failed: HTTP ${response.status} ${body}`);
+  }
+  return response.json();
+};
+
+const firestoreValueToDate = (value) => {
+  if (!value) return null;
+  if (value.timestampValue) return new Date(value.timestampValue);
+  if (value.stringValue) return new Date(value.stringValue);
+  if (value.integerValue) return new Date(Number(value.integerValue));
+  if (value.doubleValue) return new Date(Number(value.doubleValue));
+  if (value.mapValue?.fields?._seconds?.integerValue) {
+    return new Date(Number(value.mapValue.fields._seconds.integerValue) * 1000);
+  }
+  return null;
+};
+
+const formatDate = (date) => {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
+
+const formatMonth = (date) => {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(date);
+};
+
+const listCollection = async (path) => {
+  let pageToken = '';
+  const documents = [];
+  while (true) {
+    const url = new URL(`${rootUrl}/${path}`);
+    url.searchParams.set('pageSize', '1000');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const payload = await fetchJson(url);
+    documents.push(...(payload.documents || []));
+    pageToken = payload.nextPageToken || '';
+    if (!pageToken) break;
+  }
+  return documents;
+};
+
+const businesses = await listCollection('businesses');
+const countsByDate = new Map();
+const countsByMonth = new Map();
+let documentsScanned = 0;
+let totalInDateRange = 0;
+let totalInMonthRange = 0;
+let missing = 0;
+let invalid = 0;
+
+for (const business of businesses) {
+  const businessId = business.name.split('/').pop();
+  const invoices = await listCollection(`businesses/${businessId}/invoices`);
+  for (const invoice of invoices) {
+    documentsScanned += 1;
+    const value = invoice.fields?.[dateField];
+    if (!value) {
+      missing += 1;
+      continue;
+    }
+    const date = firestoreValueToDate(value);
+    const day = formatDate(date);
+    const month = formatMonth(date);
+    if (!day || !month) {
+      invalid += 1;
+      continue;
+    }
+    if (day >= startDate && day <= endDate) {
+      totalInDateRange += 1;
+      countsByDate.set(day, (countsByDate.get(day) || 0) + 1);
+    }
+    if (month >= startMonth && month <= endMonth) {
+      totalInMonthRange += 1;
+      countsByMonth.set(month, (countsByMonth.get(month) || 0) + 1);
+    }
+  }
+}
+
+const dateRows = [...countsByDate.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([date, count]) => ({ date, count }));
+const monthRows = [...countsByMonth.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([month, count]) => ({ month, count }));
+
+console.log(`project: ${projectId}`);
+console.log(`dateField: ${dateField}`);
+console.log(`businessesScanned: ${businesses.length}`);
+console.log(`documentsScanned: ${documentsScanned}`);
+console.log(`dateRange: ${startDate}..${endDate} Europe/Athens`);
+console.log(`totalInDateRange: ${totalInDateRange}`);
+console.log(`monthRange: ${startMonth}..${endMonth} Europe/Athens`);
+console.log(`totalInMonthRange: ${totalInMonthRange}`);
+console.log(`missingDateField: ${missing}`);
+console.log(`invalidDateField: ${invalid}`);
+console.log('\nGrouped by month');
+console.table(monthRows);
+console.log('\nGrouped by date');
+console.table(dateRows);
 NODE
 ```
 
