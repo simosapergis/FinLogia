@@ -23,6 +23,43 @@ import { ensureSupplierProfile } from './suppliers.js';
 import { FINANCIAL_ENTRIES_COLLECTION, ENTRY_TYPE, ENTRY_SOURCE, EXPENSE_CATEGORY } from './financial.js';
 import { sendOcrSuccessEmail, sendOcrErrorEmail } from './email-utils.js';
 
+async function cleanupUploadedPages(pages, defaultBucket, invoiceId) {
+  const files = new Map();
+
+  for (const page of pages) {
+    const objectName = page?.objectName;
+    const bucketName = page?.bucket || defaultBucket;
+    if (!objectName || !bucketName) continue;
+
+    files.set(`${bucketName}/${objectName}`, { bucketName, objectName });
+  }
+
+  if (!files.size) return;
+
+  const entries = Array.from(files.values());
+  const results = await Promise.allSettled(
+    entries.map(({ bucketName, objectName }) =>
+      storage.bucket(bucketName).file(objectName).delete({ ignoreNotFound: true })
+    )
+  );
+  const failures = results
+    .map((result, index) => ({ result, file: entries[index] }))
+    .filter(({ result }) => result.status === 'rejected');
+
+  if (failures.length) {
+    console.warn(
+      `Failed to clean up ${failures.length} uploaded page file(s) for invoice ${invoiceId}:`,
+      failures.map(({ file, result }) => ({
+        path: `gs://${file.bucketName}/${file.objectName}`,
+        error: result.reason?.message || result.reason,
+      }))
+    );
+    return;
+  }
+
+  console.log(`Cleaned up ${entries.length} uploaded page file(s) for invoice ${invoiceId}`);
+}
+
 /**
  * Core handler for processInvoiceDocument_v2.
  * Processes an invoice document when its status changes to 'ready'.
@@ -220,6 +257,7 @@ async function processInvoiceDocumentHandler(event) {
       console.log(`Stored normalized PDF at gs://${bucketName}/${pdfObjectPath}`);
     } catch (pdfError) {
       console.error(`Failed to store combined PDF for invoice ${invoiceId}:`, pdfError);
+      throw pdfError;
     }
 
     const invoiceDocRef = db.doc(`businesses/${businessId}/invoices/${invoiceId}`);
@@ -245,7 +283,6 @@ async function processInvoiceDocumentHandler(event) {
 
     const invoicePayload = {
       invoiceId,
-      rawFilePaths: pages.map((p) => p.objectName),
       filePath: pdfObjectPath,
       bucket: bucketName,
       uploadedBy,
@@ -335,6 +372,8 @@ async function processInvoiceDocumentHandler(event) {
     });
 
     console.log(`Stored invoice data at ${invoiceDocRef.path}`);
+
+    await cleanupUploadedPages(pages, bucketName, invoiceId);
 
     if (invoiceData.senderEmail) {
       await sendOcrSuccessEmail(invoiceData.senderEmail, invoiceNumber, supplierName);
