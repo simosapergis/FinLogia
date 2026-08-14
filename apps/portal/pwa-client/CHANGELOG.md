@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/simosapergis/FinLogia/compare/v1.5.0...v1.5.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* clean up invoice upload staging files ([#17](https://github.com/simosapergis/FinLogia/issues/17)) ([aebb6f1](https://github.com/simosapergis/FinLogia/commit/aebb6f1fd7f2925e1bff06c0eeca09b251da19b6))
+
 # [1.5.0](https://github.com/simosapergis/FinLogia/compare/v1.4.0...v1.5.0) (2026-08-11)
 
 
