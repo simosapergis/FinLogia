@@ -44,9 +44,7 @@ export interface Invoice {
   uploadedBy?: string;
   uploadedByName?: string;
   bucket?: string;
-  rawFilePaths?: string[];
   filePath?: string;
   fileUrl?: string;
   quality: InvoiceQuality;
 }
-
