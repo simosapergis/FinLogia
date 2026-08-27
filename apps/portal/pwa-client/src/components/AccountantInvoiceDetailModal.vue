@@ -307,8 +307,8 @@ watch(
         if (invoice.value?.filePath) {
           try {
             const urlRes = await requestSignedDownloadUrl({
-              filePath: invoice.value.filePath,
               businessId: props.clientProjectId,
+              invoiceId: props.invoiceId,
             });
             pdfUrl.value = urlRes.downloadUrl;
           } catch {

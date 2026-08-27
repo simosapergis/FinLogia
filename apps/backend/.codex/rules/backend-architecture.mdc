@@ -17,6 +17,7 @@ Your primary focus is on security, cost-efficiency, and strict multi-tenant data
 - **Database Scoping:** Always scope database queries and storage paths with `businessId`.
 - **No Cross-Tenant Queries:** Do NOT use `collectionGroup` queries across different businesses.
 - **Storage Security:** Do not expose Cloud Storage buckets directly; always use signed URLs.
+- **Signed Download Authorization:** Never sign a client-supplied Storage object path. Authorize access to the requested `businessId`, load the owning Firestore resource, and resolve the object path from that trusted document before generating a signed URL.
 
 ## 3. AI, OCR & Ingestion Architecture
 - **Invoice Processing:** We use Google Cloud Vertex AI with the `gemini-2.5-flash` multimodal model to process uploaded invoices directly from Cloud Storage (`gs://` URIs).

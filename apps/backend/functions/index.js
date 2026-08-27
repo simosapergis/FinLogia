@@ -1050,7 +1050,8 @@ export const updateSupplierFields_v2 = usageOnRequest(HTTP_OPTS, 'updateSupplier
 //
 // Request Body:
 // {
-//   filePath: string           // Required - path to file in storage (e.g. "suppliers/abc/invoices/xyz.pdf")
+//   businessId: string,        // Required - business that owns the invoice
+//   invoiceId: string          // Required - invoice document ID
 // }
 //
 // Response:
@@ -1060,7 +1061,9 @@ export const updateSupplierFields_v2 = usageOnRequest(HTTP_OPTS, 'updateSupplier
 // }
 //
 // Security:
-// - Requires Firebase Authentication (any authenticated user can download)
+// - Requires Firebase Authentication
+// - Requires access to the business that owns the invoice
+// - Resolves the Storage path from the trusted invoice document
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Blue-green deployment: v2 functions run alongside v1
@@ -1072,19 +1075,47 @@ export const getSignedDownloadUrl_v2 = usageOnRequest(HTTP_OPTS, 'getSignedDownl
   if (authResult.error) {
     return sendError(res, authResult.status, authResult.error);
   }
+  const user = authResult.user;
 
-  const { filePath } = req.body || {};
+  const { businessId: rawBusinessId, invoiceId: rawInvoiceId } = req.body || {};
 
-  if (!filePath || typeof filePath !== 'string') {
-    return sendError(res, 400, 'filePath is required and must be a string');
+  if (typeof rawBusinessId !== 'string' || !rawBusinessId.trim()) {
+    return sendError(res, 400, 'businessId is required and must be a string');
   }
 
-  const bucketName = getBucketName();
-  if (!bucketName) {
-    return sendError(res, 500, 'Missing GCS bucket configuration');
+  if (typeof rawInvoiceId !== 'string' || !rawInvoiceId.trim()) {
+    return sendError(res, 400, 'invoiceId is required and must be a string');
+  }
+
+  const businessId = rawBusinessId.trim();
+  const invoiceId = rawInvoiceId.trim();
+
+  const access = validateBusinessAccess(user, businessId);
+  if (access.error) {
+    return sendError(res, access.status, access.error);
   }
 
   try {
+    const invoiceRef = db.collection('businesses').doc(businessId).collection('invoices').doc(invoiceId);
+    const invoiceSnap = await invoiceRef.get();
+    if (!invoiceSnap.exists) {
+      return sendError(res, 404, 'Invoice not found');
+    }
+
+    const invoiceData = invoiceSnap.data();
+    const filePath = invoiceData.filePath;
+    const expectedPathPrefix = `businesses/${businessId}/invoices/`;
+
+    if (typeof filePath !== 'string' || !filePath.startsWith(expectedPathPrefix)) {
+      console.warn(`Invoice ${invoiceId} has an invalid file path for business ${businessId}`);
+      return sendError(res, 404, 'Invoice file not found');
+    }
+
+    const bucketName = invoiceData.bucket || getBucketName();
+    if (!bucketName) {
+      return sendError(res, 500, 'Missing GCS bucket configuration');
+    }
+
     // Check if file exists
     const file = storage.bucket(bucketName).file(filePath);
     const [exists] = await file.exists();
@@ -1104,8 +1135,6 @@ export const getSignedDownloadUrl_v2 = usageOnRequest(HTTP_OPTS, 'getSignedDownl
 
     return res.status(200).json({
       downloadUrl,
-      filePath,
-      bucket: bucketName,
       expiresAt: new Date(expiresAtMs).toISOString(),
     });
   } catch (error) {
