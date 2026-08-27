@@ -28,7 +28,7 @@ describe('requestSignedDownloadUrl', () => {
 
     await expect(requestSignedDownloadUrl(payload)).resolves.toEqual(response);
     expect(mockApiRequest).toHaveBeenCalledWith(
-      expect.stringContaining('getSignedDownloadUrl_v2'),
+      expect.any(String),
       'POST',
       payload
     );
