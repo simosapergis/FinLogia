@@ -631,9 +631,9 @@ describe('API Endpoints & Business Logic', () => {
   });
 
   describe('deleteInvoice_v2', () => {
-    it('should successfully hard-delete invoice and soft-delete financial entries', async () => {
+    it('should allow a business owner to delete their own invoice even when they are an accountant', async () => {
       auth.authenticateRequest.mockResolvedValue({
-        user: { uid: 'user1', businessId: 'businessA' }
+        user: { uid: 'user1', businessId: 'businessA', isAccountant: true }
       });
       req.body = { businessId: 'businessA', invoiceId: 'inv1' };
 
@@ -707,6 +707,21 @@ describe('API Endpoints & Business Logic', () => {
       await deleteInvoice_v2(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('should reject accountant deletion before reading the invoice', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'accountant1', businessId: 'businessB', isAccountant: true }
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'inv1' };
+
+      await deleteInvoice_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'Only the business owner can perform this action'
+      }));
+      expect(db.collection).not.toHaveBeenCalled();
     });
 
     it('should return 404 if invoice does not exist', async () => {

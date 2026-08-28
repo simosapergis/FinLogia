@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'finlogia-demo',
@@ -21,9 +20,6 @@ if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
 
     const db = getFirestore(firebaseApp);
     connectFirestoreEmulator(db, 'localhost', 8080);
-
-    const storage = getStorage(firebaseApp);
-    connectStorageEmulator(storage, 'localhost', 9199);
   } catch (e) {
     console.error('Emulator connection error:', e);
   }

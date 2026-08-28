@@ -24,7 +24,7 @@ import {
   getAthensToday,
 } from './lib/config.js';
 
-import { authenticateRequest, getUserDisplayName, validateBusinessAccess } from './lib/auth.js';
+import { authenticateRequest, getUserDisplayName, validateBusinessAccess, requireBusinessOwner } from './lib/auth.js';
 import { HTTP_OPTS, requireMethod, sendError } from './lib/http-utils.js';
 import { getRole, logUsageEvent, withUsageTelemetry } from './lib/usage-telemetry.js';
 import { isUsageTelemetryEnabled } from './lib/telemetry-config.js';
@@ -1432,8 +1432,9 @@ export const deleteInvoice_v2 = usageOnRequest(HTTP_OPTS, 'deleteInvoice_v2', as
     return sendError(res, 400, 'invoiceId is required and must be a string');
   }
 
-  if (user.businessId !== businessId && !user.isAccountant) {
-    return sendError(res, 403, 'Unauthorized access to this business');
+  const ownerAccess = requireBusinessOwner(user, businessId);
+  if (ownerAccess.error) {
+    return sendError(res, ownerAccess.status, ownerAccess.error);
   }
 
   try {
