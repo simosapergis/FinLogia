@@ -816,7 +816,8 @@ const openUrl = (url: string) => {
 };
 
 const openPdf = async () => {
-  if (!props.invoice.filePath) return;
+  const businessId = userStore.currentBusinessId;
+  if (!businessId || !props.invoice.id) return;
 
   loadingPdf.value = true;
   pdfError.value = null;
@@ -828,7 +829,8 @@ const openPdf = async () => {
     }
 
     const { downloadUrl } = await requestSignedDownloadUrl({
-      filePath: props.invoice.filePath,
+      businessId,
+      invoiceId: props.invoice.id,
     });
  
     openUrl(downloadUrl);

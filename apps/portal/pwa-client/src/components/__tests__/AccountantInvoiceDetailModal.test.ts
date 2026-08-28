@@ -13,7 +13,6 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('@/services/api/invoicesApi', () => ({
   recordInvoiceView: vi.fn().mockResolvedValue({ success: true }),
-  deleteInvoice: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('@/services/notifications', () => ({
@@ -21,7 +20,6 @@ vi.mock('@/services/notifications', () => ({
 }));
 
 import AccountantInvoiceDetailModal from '../AccountantInvoiceDetailModal.vue';
-import { deleteInvoice } from '@/services/api/invoicesApi';
 
 describe('AccountantInvoiceDetailModal.vue', () => {
   beforeEach(() => {
@@ -33,7 +31,6 @@ describe('AccountantInvoiceDetailModal.vue', () => {
       props: {
         visible: true,
         clientProjectId: 'test-business',
-        supplierId: 'test-supplier',
         invoiceId: 'inv123',
         bucketName: 'test-bucket',
         auditStatus: null,
@@ -46,7 +43,6 @@ describe('AccountantInvoiceDetailModal.vue', () => {
           X: true,
           XIcon: true,
           Check: true,
-          Trash2: true,
           AlertCircle: true,
           FileText: true,
           Download: true,
@@ -70,12 +66,11 @@ describe('AccountantInvoiceDetailModal.vue', () => {
     expect(auditEvents?.[0]).toEqual(['registered']);
   });
 
-  it('should show delete confirmation and emit deleted when confirmed', async () => {
+  it('does not render a delete control', async () => {
     const wrapper = mount(AccountantInvoiceDetailModal, {
       props: {
         visible: true,
         clientProjectId: 'test-business',
-        supplierId: 'test-supplier',
         invoiceId: 'inv123',
         bucketName: 'test-bucket',
         auditStatus: null,
@@ -88,7 +83,6 @@ describe('AccountantInvoiceDetailModal.vue', () => {
           X: true,
           XIcon: true,
           Check: true,
-          Trash2: true,
           AlertCircle: true,
           FileText: true,
           Download: true,
@@ -102,25 +96,7 @@ describe('AccountantInvoiceDetailModal.vue', () => {
 
     await wrapper.vm.$nextTick();
 
-    const deleteBtn = wrapper.findAll('button').find(b => b.attributes('title') === 'Διαγραφή');
-    expect(deleteBtn).toBeDefined();
-    await deleteBtn?.trigger('click');
-
-    // Wait for state update (showDeleteConfirm = true)
-    await wrapper.vm.$nextTick();
-
-    // The confirmation dialog should now be visible. Click the confirm button.
-    const buttons = wrapper.findAll('button');
-    const confirmBtn = buttons.find(b => b.text().includes('Διαγραφή'));
-    expect(confirmBtn).toBeDefined();
-    await confirmBtn?.trigger('click');
-
-    // Wait for the async API call to complete
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await wrapper.vm.$nextTick();
-
-    expect(deleteInvoice).toHaveBeenCalledWith({ businessId: 'test-business', invoiceId: 'inv123' });
-    expect(wrapper.emitted()).toHaveProperty('deleted');
-    expect(wrapper.emitted('deleted')?.[0]).toEqual(['inv123']);
+    expect(wrapper.findAll('button').some(button => button.attributes('title') === 'Διαγραφή')).toBe(false);
+    expect(wrapper.text()).not.toContain('Διαγραφή Τιμολογίου');
   });
 });

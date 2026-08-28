@@ -17,6 +17,9 @@ Your primary focus is on security, cost-efficiency, and strict multi-tenant data
 - **Database Scoping:** Always scope database queries and storage paths with `businessId`.
 - **No Cross-Tenant Queries:** Do NOT use `collectionGroup` queries across different businesses.
 - **Storage Security:** Do not expose Cloud Storage buckets directly; always use signed URLs.
+- **Direct Storage Deny:** Firebase Storage Rules must deny every direct client read and write. New upload, download, export, or deletion workflows require an authenticated backend authorization step that issues a narrowly scoped signed URL or performs the operation with a trusted backend identity.
+- **Signed Download Authorization:** Never sign a client-supplied Storage object path. Authorize access to the requested `businessId`, load the owning Firestore resource, and resolve the object path from that trusted document before generating a signed URL.
+- **Business-Owned Mutations:** Accountant access alone does not grant permission to create, edit, or delete client-owned data. Use `requireBusinessOwner` for owner-only mutations such as invoice deletion; a dual-role account is allowed only for its own `businessId`. Enforce the same restriction in the portal UI.
 
 ## 3. AI, OCR & Ingestion Architecture
 - **Invoice Processing:** We use Google Cloud Vertex AI with the `gemini-2.5-flash` multimodal model to process uploaded invoices directly from Cloud Storage (`gs://` URIs).

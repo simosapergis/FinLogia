@@ -55,4 +55,21 @@ function validateBusinessAccess(user, targetBusinessId) {
   return { error: 'Unauthorized access to this business', status: 403 };
 }
 
-export { extractBearerToken, authenticateRequest, getUserDisplayName, validateBusinessAccess };
+/**
+ * Restricts business-owned mutations to the owner. Accountant claims alone grant
+ * office-wide read access, but an account that is also a business owner may
+ * still modify or delete data belonging to its own business.
+ */
+function requireBusinessOwner(user, targetBusinessId) {
+  if (!targetBusinessId) {
+    return { error: 'businessId is required', status: 400 };
+  }
+
+  if (user.businessId !== targetBusinessId) {
+    return { error: 'Only the business owner can perform this action', status: 403 };
+  }
+
+  return { success: true };
+}
+
+export { extractBearerToken, authenticateRequest, getUserDisplayName, validateBusinessAccess, requireBusinessOwner };

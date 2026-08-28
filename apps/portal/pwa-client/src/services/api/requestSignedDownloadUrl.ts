@@ -7,8 +7,8 @@ export interface SignedDownloadUrlResponse {
 }
 
 interface SignedDownloadUrlRequest {
-  filePath: string;
-  businessId?: string;
+  businessId: string;
+  invoiceId: string;
 }
 
 const SIGNED_DOWNLOAD_URL_PATH = import.meta.env.VITE_SIGNED_DOWNLOAD_URL_PATH ?? 'sign/download';

@@ -92,50 +92,56 @@ describe('Firestore Security Rules', () => {
 });
 
 describe('Storage Security Rules', () => {
-  it('should deny unauthenticated access', async () => {
+  const seedStorageObject = async (path) => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
-      const storage = context.storage();
-      await storage.ref('businesses/business_A/invoices/file.pdf').putString('fake-content');
+      await context.storage().ref(path).putString('fake-content');
     });
+  };
 
-    const unauthedStorage = testEnv.unauthenticatedContext().storage();
-    const fileRef = unauthedStorage.ref('businesses/business_A/invoices/file.pdf');
-    await assertFails(fileRef.getDownloadURL());
+  it('denies unauthenticated direct Storage reads and writes', async () => {
+    await seedStorageObject('businesses/business_A/invoices/file.pdf');
+
+    const storage = testEnv.unauthenticatedContext().storage();
+    await assertFails(storage.ref('businesses/business_A/invoices/file.pdf').getDownloadURL());
+    await assertFails(storage.ref('businesses/business_A/uploads/invoice/page-001.pdf').putString('fake-content'));
   });
 
-  it('should prevent cross-tenant leakage', async () => {
-    // Setup test data
-    await testEnv.withSecurityRulesDisabled(async (context) => {
-      const db = context.firestore();
-      await db.collection('users').doc('user_A').set({ businessId: 'business_A' });
-      
-      const storage = context.storage();
-      await storage.ref('businesses/business_B/invoices/file.pdf').putString('fake-content');
-    });
+  it('denies a business owner direct invoice reads and writes', async () => {
+    await seedStorageObject('businesses/business_A/invoices/file.pdf');
 
-    const authedStorage = testEnv.authenticatedContext('user_A').storage();
-    const fileRef = authedStorage.ref('businesses/business_B/invoices/file.pdf');
-    
-    // Attempt to read Business B's storage as User A
-    await assertFails(fileRef.getDownloadURL());
+    const storage = testEnv.authenticatedContext('user_A').storage();
+    await assertFails(storage.ref('businesses/business_A/invoices/file.pdf').getDownloadURL());
+    await assertFails(storage.ref('businesses/business_A/invoices/new-file.pdf').putString('fake-content'));
   });
 
-  it('should allow accountant to read PDFs but not other files', async () => {
-    // Setup test data: upload the files first!
-    await testEnv.withSecurityRulesDisabled(async (context) => {
-      const storage = context.storage();
-      await storage.ref('businesses/business_A/invoices/invoice.pdf').putString('fake-pdf-content');
-      await storage.ref('businesses/business_A/invoices/invoice.jpg').putString('fake-jpg-content');
-    });
+  it('denies a business owner direct staging upload reads and writes', async () => {
+    await seedStorageObject('businesses/business_A/uploads/invoice/page-001.pdf');
 
-    const accountantStorage = testEnv.authenticatedContext('accountant_X', { isAccountant: true }).storage();
-    
-    // Accountant can read PDF
-    const pdfRef = accountantStorage.ref('businesses/business_A/invoices/invoice.pdf');
-    await assertSucceeds(pdfRef.getDownloadURL());
-    
-    // Accountant CANNOT read JPG
-    const jpgRef = accountantStorage.ref('businesses/business_A/invoices/invoice.jpg');
-    await assertFails(jpgRef.getDownloadURL());
+    const storage = testEnv.authenticatedContext('user_A').storage();
+    await assertFails(storage.ref('businesses/business_A/uploads/invoice/page-001.pdf').getDownloadURL());
+    await assertFails(storage.ref('businesses/business_A/uploads/invoice/page-002.pdf').putString('fake-content'));
+  });
+
+  it('denies accountants direct PDF reads and writes', async () => {
+    await seedStorageObject('businesses/business_A/invoices/invoice.pdf');
+
+    const storage = testEnv.authenticatedContext('accountant_X', { isAccountant: true }).storage();
+    await assertFails(storage.ref('businesses/business_A/invoices/invoice.pdf').getDownloadURL());
+    await assertFails(storage.ref('businesses/business_A/invoices/invoice-edited.pdf').putString('fake-content'));
+  });
+
+  it('denies direct export reads and writes', async () => {
+    await seedStorageObject('exports/user_A/export.zip');
+
+    const storage = testEnv.authenticatedContext('user_A').storage();
+    await assertFails(storage.ref('exports/user_A/export.zip').getDownloadURL());
+    await assertFails(storage.ref('exports/user_A/new-export.zip').putString('fake-content'));
+  });
+
+  it('continues to deny cross-business direct access', async () => {
+    await seedStorageObject('businesses/business_B/invoices/file.pdf');
+
+    const storage = testEnv.authenticatedContext('user_A').storage();
+    await assertFails(storage.ref('businesses/business_B/invoices/file.pdf').getDownloadURL());
   });
 });

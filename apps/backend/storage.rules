@@ -3,29 +3,18 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isAccountant() {
-      return request.auth != null && request.auth.token.isAccountant == true;
-    }
-
-    function getUserBusinessId() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.businessId;
-    }
-
-    function isBusinessOwner(businessId) {
-      return request.auth != null && getUserBusinessId() == businessId;
-    }
-
-    match /businesses/{businessId}/invoices/{fileName} {
-      allow read: if isBusinessOwner(businessId) || (isAccountant() && fileName.matches('.*\\.pdf'));
-      allow write: if isBusinessOwner(businessId);
+    // Browser clients must use backend-authorized signed URLs for all files.
+    // Cloud Functions and signed URL requests bypass Firebase Storage Rules.
+    match /businesses/{businessId}/invoices/{allPaths=**} {
+      allow read, write: if false;
     }
 
     match /businesses/{businessId}/uploads/{allPaths=**} {
-      allow read, write: if isBusinessOwner(businessId);
+      allow read, write: if false;
     }
 
-    match /exports/{userId}/{fileName} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    match /exports/{userId}/{allPaths=**} {
+      allow read, write: if false;
     }
 
     match /{allPaths=**} {

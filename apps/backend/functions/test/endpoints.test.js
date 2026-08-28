@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { addFinancialEntry_v2, updatePaymentStatus_v2, createClientBusiness_v2, addUserToBusiness_v2, addAccountant_v2, processRecurringExpenses_v2, deleteInvoice_v2 } from '../index.js';
+import { addFinancialEntry_v2, updatePaymentStatus_v2, createClientBusiness_v2, addUserToBusiness_v2, addAccountant_v2, processRecurringExpenses_v2, deleteInvoice_v2, getSignedDownloadUrl_v2 } from '../index.js';
 import * as auth from '../lib/auth.js';
+import { db, storage } from '../lib/config.js';
 
 // Mock the auth module
 vi.mock('../lib/auth.js', async (importOriginal) => {
@@ -82,6 +83,17 @@ describe('API Endpoints & Business Logic', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    db.collection.mockImplementation(() => ({
+      doc: vi.fn(() => ({
+        collection: vi.fn(() => ({
+          add: vi.fn(() => Promise.resolve({ id: 'new-doc-id' })),
+          doc: vi.fn(() => ({
+            get: vi.fn(),
+            update: vi.fn(),
+          })),
+        })),
+      })),
+    }));
     
     req = {
       method: 'POST',
@@ -100,6 +112,194 @@ describe('API Endpoints & Business Logic', () => {
       getHeader: vi.fn(),
       end: vi.fn(),
     };
+  });
+
+  describe('getSignedDownloadUrl_v2', () => {
+    const mockInvoiceDocument = (invoiceData) => {
+      const get = vi.fn().mockResolvedValue({
+        exists: Boolean(invoiceData),
+        data: vi.fn(() => invoiceData),
+      });
+      const invoiceDoc = vi.fn().mockReturnValue({ get });
+      const invoicesCollection = vi.fn().mockReturnValue({ doc: invoiceDoc });
+      const businessDoc = vi.fn().mockReturnValue({ collection: invoicesCollection });
+
+      db.collection.mockReturnValue({ doc: businessDoc });
+
+      return { get, invoiceDoc, invoicesCollection, businessDoc };
+    };
+
+    const mockStoredFile = ({ exists = true, downloadUrl = 'https://storage.example.com/invoice.pdf' } = {}) => {
+      const file = {
+        exists: vi.fn().mockResolvedValue([exists]),
+        getSignedUrl: vi.fn().mockResolvedValue([downloadUrl]),
+      };
+      const fileForPath = vi.fn().mockReturnValue(file);
+      storage.bucket = vi.fn().mockReturnValue({ file: fileForPath });
+
+      return { file, fileForPath };
+    };
+
+    it('rejects unauthenticated requests', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        error: 'Missing or invalid Authorization header',
+        status: 401,
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(db.collection).not.toHaveBeenCalled();
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('rejects the legacy client-supplied filePath contract', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = {
+        filePath: 'businesses/businessA/invoices/invoice.pdf',
+      };
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'businessId is required and must be a string',
+      }));
+      expect(db.collection).not.toHaveBeenCalled();
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing invoiceId', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = { businessId: 'businessA' };
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'invoiceId is required and must be a string',
+      }));
+      expect(db.collection).not.toHaveBeenCalled();
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('rejects access to another business before reading or signing the file', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessB' },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'Unauthorized access to this business',
+      }));
+      expect(db.collection).not.toHaveBeenCalled();
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('signs the trusted invoice path for the owning business', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      const filePath = 'businesses/businessA/invoices/invoice1.pdf';
+      const invoiceMocks = mockInvoiceDocument({ filePath, bucket: 'invoice-bucket' });
+      const storageMocks = mockStoredFile();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(db.collection).toHaveBeenCalledWith('businesses');
+      expect(invoiceMocks.businessDoc).toHaveBeenCalledWith('businessA');
+      expect(invoiceMocks.invoicesCollection).toHaveBeenCalledWith('invoices');
+      expect(invoiceMocks.invoiceDoc).toHaveBeenCalledWith('invoice1');
+      expect(storage.bucket).toHaveBeenCalledWith('invoice-bucket');
+      expect(storageMocks.fileForPath).toHaveBeenCalledWith(filePath);
+      expect(storageMocks.file.getSignedUrl).toHaveBeenCalledWith(expect.objectContaining({
+        version: 'v4',
+        action: 'read',
+      }));
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        downloadUrl: 'https://storage.example.com/invoice.pdf',
+        expiresAt: expect.any(String),
+      });
+    });
+
+    it('allows an accountant to sign an invoice path from the trusted document', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'accountant1', isAccountant: true },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      mockInvoiceDocument({
+        filePath: 'businesses/businessA/invoices/invoice1.pdf',
+        bucket: 'invoice-bucket',
+      });
+      mockStoredFile();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(storage.bucket).toHaveBeenCalledWith('invoice-bucket');
+    });
+
+    it('does not sign a path when the invoice does not exist', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'missing-invoice' };
+      mockInvoiceDocument(null);
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invoice not found' }));
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('does not sign a stored path outside the authorized business invoice prefix', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      mockInvoiceDocument({
+        filePath: 'businesses/businessB/invoices/secret.pdf',
+        bucket: 'invoice-bucket',
+      });
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invoice file not found' }));
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
+
+    it('does not sign an invoice that has no stored filePath', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'user1', businessId: 'businessA' },
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'invoice1' };
+      mockInvoiceDocument({ bucket: 'invoice-bucket' });
+      storage.bucket = vi.fn();
+
+      await getSignedDownloadUrl_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invoice file not found' }));
+      expect(storage.bucket).not.toHaveBeenCalled();
+    });
   });
 
   describe('addFinancialEntry_v2', () => {
@@ -431,9 +631,9 @@ describe('API Endpoints & Business Logic', () => {
   });
 
   describe('deleteInvoice_v2', () => {
-    it('should successfully hard-delete invoice and soft-delete financial entries', async () => {
+    it('should allow a business owner to delete their own invoice even when they are an accountant', async () => {
       auth.authenticateRequest.mockResolvedValue({
-        user: { uid: 'user1', businessId: 'businessA' }
+        user: { uid: 'user1', businessId: 'businessA', isAccountant: true }
       });
       req.body = { businessId: 'businessA', invoiceId: 'inv1' };
 
@@ -507,6 +707,21 @@ describe('API Endpoints & Business Logic', () => {
       await deleteInvoice_v2(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('should reject accountant deletion before reading the invoice', async () => {
+      auth.authenticateRequest.mockResolvedValue({
+        user: { uid: 'accountant1', businessId: 'businessB', isAccountant: true }
+      });
+      req.body = { businessId: 'businessA', invoiceId: 'inv1' };
+
+      await deleteInvoice_v2(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'Only the business owner can perform this action'
+      }));
+      expect(db.collection).not.toHaveBeenCalled();
     });
 
     it('should return 404 if invoice does not exist', async () => {
